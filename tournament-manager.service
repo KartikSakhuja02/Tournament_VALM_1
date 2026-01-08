@@ -1,0 +1,16 @@
+[Unit]
+Description=Valorant Tournament Manager Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kartiksakhuja02
+WorkingDirectory=/home/kartiksakhuja02/valorant-tournament
+ExecStart=/home/kartiksakhuja02/valorant-tournament/venv/bin/python /home/kartiksakhuja02/valorant-tournament/main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
