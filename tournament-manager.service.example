@@ -5,9 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=kartiksakhuja02
-WorkingDirectory=/home/kartiksakhuja02/valorant-tournament
-ExecStart=/home/kartiksakhuja02/valorant-tournament/venv/bin/python /home/kartiksakhuja02/valorant-tournament/main.py
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/your/valorant-tournament
+ExecStart=/path/to/your/valorant-tournament/venv/bin/python /path/to/your/valorant-tournament/main.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
