@@ -10,26 +10,26 @@ class RegistrationButtons(discord.ui.View):
         super().__init__(timeout=None)  # Persistent buttons (no timeout)
     
     @discord.ui.button(
-        label="📸 Screenshot Register",
+        label="Screenshot Register",
         style=discord.ButtonStyle.primary,
         custom_id="screenshot_register"
     )
     async def screenshot_register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle screenshot registration button click"""
         await interaction.response.send_message(
-            "📸 Screenshot registration selected! (Functionality coming soon)",
+            "Screenshot registration selected! (Functionality coming soon)",
             ephemeral=True
         )
     
     @discord.ui.button(
-        label="✍️ Manual Register",
+        label="Manual Register",
         style=discord.ButtonStyle.secondary,
         custom_id="manual_register"
     )
     async def manual_register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle manual registration button click"""
         await interaction.response.send_message(
-            "✍️ Manual registration selected! (Functionality coming soon)",
+            "Manual registration selected! (Functionality coming soon)",
             ephemeral=True
         )
 
@@ -43,25 +43,19 @@ class RegistrationCog(commands.Cog):
         """Create the registration embed message"""
         embed = discord.Embed(
             title="🎮 VALORANT Tournament Registration",
-            description="Welcome to the Regional Scrim Tournament! Register your team using one of the options below:",
+            description="Welcome to the Bot! Register yourself using one of the options below:",
             color=discord.Color.red()  # VALORANT red theme
         )
         
         embed.add_field(
-            name="📸 Screenshot Register",
-            value="Upload a screenshot of your team details for quick registration",
+            name="Screenshot Register",
+            value="Upload a screenshot of your team details for quick registration\n**Requirements:** Clear screenshot of your profile, Region",
             inline=False
         )
         
         embed.add_field(
-            name="✍️ Manual Register",
-            value="Manually enter your team information step by step",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📋 Requirements",
-            value="• Team Name\n• 5 Players + 1 Substitute\n• Valid IGNs\n• Discord Tags",
+            name="Manual Register",
+            value="Manually enter your team information step by step\n**Requirements:** IGN, In-game ID, Region",
             inline=False
         )
         
