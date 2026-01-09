@@ -3,10 +3,12 @@ from discord.ext import commands
 import os
 import asyncio
 from dotenv import load_dotenv
-from utils import TEST_ROLE_ID
 
-# Load environment variables
+# Load environment variables FIRST before importing utils
 load_dotenv()
+
+# Now import utils after env vars are loaded
+from utils import TEST_ROLE_ID
 
 # Bot setup
 intents = discord.Intents.default()
