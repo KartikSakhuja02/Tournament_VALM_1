@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import os
 
 class RegistrationButtons(discord.ui.View):
     """Persistent view with registration buttons"""
@@ -65,7 +66,6 @@ class RegistrationCog(commands.Cog):
         )
         
         embed.set_footer(text="Click a button below to start registration")
-        embed.set_thumbnail(url="https://i.imgur.com/YZ4w2ey.png")  # VALORANT logo (example)
         
         return embed
     
@@ -80,9 +80,18 @@ class RegistrationCog(commands.Cog):
             embed = self.create_registration_embed()
             view = RegistrationButtons()
             
-            # Send the message with embed and buttons
-            await channel.send(embed=embed, view=view)
-            print(f"✅ Registration message sent to channel: {channel.name}")
+            # Load and attach logo
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
+            
+            if os.path.exists(logo_path):
+                file = discord.File(logo_path, filename="LOGO.jpeg")
+                embed.set_thumbnail(url="attachment://LOGO.jpeg")
+                # Send the message with embed, logo, and buttons
+                await channel.send(file=file, embed=embed, view=view)
+                print(f"✅ Registration message sent to channel: {channel.name}")
+            else:
+                print(f"⚠️  Logo not found at {logo_path}, sending without logo")
+                await channel.send(embed=embed, view=view)
             
         except Exception as e:
             print(f"❌ Error sending registration message: {e}")
