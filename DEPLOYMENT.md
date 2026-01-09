@@ -99,20 +99,25 @@ Test `/ping` in Discord, then stop with Ctrl+C.
 
 ### 7. Install Systemd Service (24/7 Auto-Start)
 
-The repository includes a service file. First, check your username and home directory:
+**IMPORTANT:** The service file paths must match where you cloned the repo!
 
+Check your actual location:
 ```bash
-whoami
 pwd
+# Should show something like /home/kartiksakhuja02/valorant-tournament
 ```
 
-If your username is NOT `kartiksakhuja02`, edit the service file:
+Edit the service file to match YOUR actual path:
 ```bash
 nano tournament-manager.service
-# Change User= and WorkingDirectory= paths to match your username
 ```
 
-Then install it:
+Update these lines to match your directory:
+- `WorkingDirectory=/home/YOUR_USERNAME/YOUR_ACTUAL_PATH`
+- `ExecStart=/home/YOUR_USERNAME/YOUR_ACTUAL_PATH/venv/bin/python /home/YOUR_USERNAME/YOUR_ACTUAL_PATH/main.py`
+- `User=YOUR_USERNAME`
+
+Then install:
 ```bash
 sudo cp tournament-manager.service /etc/systemd/system/
 sudo systemctl daemon-reload

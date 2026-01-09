@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from utils import has_test_role
 
 class PingCommand(commands.Cog):
     """Ping command to check bot latency"""
@@ -9,6 +10,7 @@ class PingCommand(commands.Cog):
         self.bot = bot
     
     @app_commands.command(name="ping", description="Check bot latency and response time")
+    @has_test_role()
     async def ping(self, interaction: discord.Interaction):
         """Shows the bot's latency in milliseconds"""
         # Get WebSocket latency

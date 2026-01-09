@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import asyncio
 from dotenv import load_dotenv
+from utils import TEST_ROLE_ID
 
 # Load environment variables
 load_dotenv()
@@ -10,6 +11,7 @@ load_dotenv()
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # Required to check member roles
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def load_commands():
@@ -50,5 +52,10 @@ if __name__ == "__main__":
         print("ERROR: DISCORD_BOT_TOKEN not found in environment variables!")
         print("Please create a .env file with your bot token.")
         exit(1)
+    
+    if TEST_ROLE_ID:
+        print(f"Role-based access control enabled (Role ID: {TEST_ROLE_ID})")
+    else:
+        print("WARNING: TEST_ROLE_ID not set. All users can use the bot!")
     
     bot.run(TOKEN)
