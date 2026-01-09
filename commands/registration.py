@@ -71,6 +71,11 @@ class RegistrationCog(commands.Cog):
                 print(f"❌ Channel with ID {channel_id} not found!")
                 return
             
+            # Purge old bot messages from the channel
+            print(f"🧹 Purging old bot messages from {channel.name}...")
+            deleted = await channel.purge(limit=100, check=lambda m: m.author == self.bot.user)
+            print(f"✅ Deleted {len(deleted)} old bot message(s)")
+            
             embed = self.create_registration_embed()
             view = RegistrationButtons()
             
