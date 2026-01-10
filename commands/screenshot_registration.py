@@ -250,7 +250,7 @@ class ScreenshotRegistrationCog(commands.Cog):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add staff members
+            # Add staff members with delay to avoid rate limiting
             if self.staff_role_id:
                 guild = interaction.guild
                 staff_role = guild.get_role(self.staff_role_id)
@@ -258,6 +258,7 @@ class ScreenshotRegistrationCog(commands.Cog):
                     for member in staff_role.members:
                         try:
                             await thread.add_user(member)
+                            await asyncio.sleep(0.5)  # Small delay to avoid rate limits
                         except:
                             pass
             
