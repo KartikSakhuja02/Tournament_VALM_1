@@ -2,12 +2,20 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+import asyncio
+import aiohttp
+import base64
+from io import BytesIO
+from PIL import Image
+import re
+import json
 
 class RegistrationButtons(discord.ui.View):
     """Persistent view with registration buttons"""
     
-    def __init__(self):
-        super().__init__(timeout=None)  # Persistent buttons (no timeout)
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
     
     @discord.ui.button(
         label="Screenshot Register",
@@ -16,10 +24,7 @@ class RegistrationButtons(discord.ui.View):
     )
     async def screenshot_register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle screenshot registration button click"""
-        await interaction.response.send_message(
-            "Screenshot registration selected! (Functionality coming soon)",
-            ephemeral=True
-        )
+        await self.cog.handle_screenshot_registration(interaction)
     
     @discord.ui.button(
         label="Manual Register",
@@ -77,7 +82,7 @@ class RegistrationCog(commands.Cog):
             print(f"✅ Deleted {len(deleted)} old bot message(s)")
             
             embed = self.create_registration_embed()
-            view = RegistrationButtons()
+            view = RegistrationButtons(self)
             
             # Load and attach logo
             logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
