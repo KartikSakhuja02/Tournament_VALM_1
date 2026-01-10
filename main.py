@@ -79,15 +79,15 @@ if __name__ == "__main__":
     if not TOKEN:
         print("ERROR: DISCORD_BOT_TOKEN not found in environment variables!")
         print("Please create a .env file with your bot token.")
-    try:
-        bot.run(TOKEN)
-    finally:
-        # Close database connection on shutdown
-        asyncio.run(db.close()
+        exit(1)
     
     if TEST_ROLE_ID:
         print(f"Role-based access control enabled (Role ID: {TEST_ROLE_ID})")
     else:
         print("WARNING: TEST_ROLE_ID not set. All users can use the bot!")
     
-    bot.run(TOKEN)
+    try:
+        bot.run(TOKEN)
+    finally:
+        # Close database connection on shutdown
+        asyncio.run(db.close())
