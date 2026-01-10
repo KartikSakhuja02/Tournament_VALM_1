@@ -82,7 +82,10 @@ class RegistrationCog(commands.Cog):
             print(f"✅ Deleted {len(deleted)} old bot message(s)")
             
             embed = self.create_registration_embed()
-            view = RegistrationButtons(self)
+            
+            # Get screenshot registration cog
+            screenshot_cog = self.bot.get_cog("ScreenshotRegistrationCog")
+            view = RegistrationButtons(screenshot_cog)
             
             # Load and attach logo
             logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
