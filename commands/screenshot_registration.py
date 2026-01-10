@@ -477,16 +477,16 @@ Return ONLY this JSON format:
 If you can't find something, use null.
 """
             
-            # Try Gemini models (stable models first for better quota)
+            # Try Gemini models (using v1 API for stable models)
             models = [
-                ("v1beta", "gemini-1.5-flash"),      # Stable, best quota
-                ("v1beta", "gemini-1.5-pro"),        # Stable, good for complex OCR
-                ("v1beta", "gemini-2.0-flash-exp"),  # Experimental, may have limits
+                ("v1", "gemini-1.5-flash"),          # Stable, best quota
+                ("v1", "gemini-1.5-pro"),            # Stable, good for complex OCR
+                ("v1beta", "gemini-2.0-flash-exp"),  # Experimental (v1beta only)
             ]
             
             for version, model in models:
                 try:
-                    print(f"🔄 Trying model: {model}")
+                    print(f"🔄 Trying model: {model} (API: {version})")
                     url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent"
                     
                     payload = {
@@ -555,6 +555,11 @@ If you can't find something, use null.
                     continue
             
             print("❌ All OCR models failed")
+            print("⚠️  If you see quota errors with 'limit: 0', your API key needs:")
+            print("   1. Go to https://aistudio.google.com/apikey")
+            print("   2. Verify the API key is valid")
+            print("   3. Try creating a NEW API key if this one doesn't work")
+            print("   4. Make sure you're not using a Google Cloud API key (use AI Studio key)")
             return None, None
             
         except Exception as e:
