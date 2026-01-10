@@ -3,6 +3,8 @@ from discord.ext import commands
 import os
 import asyncio
 from dotenv import load_dotenv
+from utils import TEST_ROLE_ID
+from database.db import db
 
 # Load environment variables FIRST before importing utils
 load_dotenv()
@@ -38,6 +40,13 @@ async def on_ready():
     print(f"Logged in as: {bot.user.name} ({bot.user.id})")
     print("=" * 50)
     
+    # Connect to database
+    try:
+        await db.connect()
+    except Exception as e:
+        print(f"Failed to connect to database: {e}")
+        print("Bot will continue without database functionality")
+    
     # Load commands
     await load_commands()
     
@@ -70,7 +79,11 @@ if __name__ == "__main__":
     if not TOKEN:
         print("ERROR: DISCORD_BOT_TOKEN not found in environment variables!")
         print("Please create a .env file with your bot token.")
-        exit(1)
+    try:
+        bot.run(TOKEN)
+    finally:
+        # Close database connection on shutdown
+        asyncio.run(db.close()
     
     if TEST_ROLE_ID:
         print(f"Role-based access control enabled (Role ID: {TEST_ROLE_ID})")

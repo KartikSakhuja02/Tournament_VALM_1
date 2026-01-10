@@ -9,6 +9,7 @@ from io import BytesIO
 from PIL import Image
 import re
 import json
+from database.db import db
 
 
 class RetryErrorView(discord.ui.View):
@@ -138,11 +139,61 @@ class RegionDropdown(discord.ui.Select):
         
         region = self.values[0]
         
-        await interaction.response.edit_message(
-            content=f"Registration Complete!\n\nIGN: `{self.ign}`\nID: `{self.player_id}`\nRegion: `{region.upper()}`\n\n"
-                    f"You are now registered. Your stats will be tracked automatically.",
-            view=None
-        )
+        await interaction.response.defer()
+        
+        # Register player in database
+        try:
+            # Check if already registered
+            existing = await db.get_player_by_discord_id(self.user_id)
+            if existing:
+                await interaction.followup.edit_message(
+                    message_id=interaction.message.id,
+                    content=f"You are already registered.\n\nIGN: `{existing['ign']}`\nRegion: `{existing['region'].upper()}`",
+                    view=None
+                )
+                await asyncio.sleep(5)
+                if isinstance(self.channel, discord.Thread):
+                    await self.channel.delete()
+                return
+            
+            # Check if IGN is taken
+            existing_ign = await db.get_player_by_ign(self.ign)
+            if existing_ign:
+                await interaction.followup.edit_message(
+                    message_id=interaction.message.id,
+                    content=f"IGN `{self.ign}` is already taken by another player.",
+                    view=None
+                )
+                await asyncio.sleep(5)
+                if isinstance(self.channel, discord.Thread):
+                    await self.channel.delete()
+                return
+            
+            # Create player
+            player = await db.create_player(
+                discord_id=self.user_id,
+                ign=self.ign,
+                player_id=self.player_id,
+                region=region
+            )
+            
+            # Create initial stats
+            await db.create_player_stats(self.user_id)
+            
+            await interaction.followup.edit_message(
+                message_id=interaction.message.id,
+                content=f"Registration Complete!\n\nIGN: `{self.ign}`\nID: `{self.player_id}`\nRegion: `{region.upper()}`\n\n"
+                        f"You are now registered. Your stats will be tracked automatically.",
+                view=None
+            )
+            
+        except Exception as e:
+            print(f"Database error during registration: {e}")
+            await interaction.followup.edit_message(
+                message_id=interaction.message.id,
+                content=f"An error occurred during registration: {str(e)}",
+                view=None
+            )
         
         # Delete thread after 10 seconds
         await asyncio.sleep(10)
