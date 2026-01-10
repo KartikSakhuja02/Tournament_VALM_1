@@ -443,11 +443,13 @@ class ScreenshotRegistrationCog(commands.Cog):
         """Extract IGN and Player ID from screenshot using Gemini OCR"""
         
         if not self.gemini_api_key:
+            print("❌ GEMINI_API_KEY not set!")
             return None, None
         
         try:
             # Convert image to base64
             img = Image.open(BytesIO(image_bytes))
+            print(f"📸 Image loaded: {img.size}, format: {img.format}")
             
             # Resize if too large
             max_size = 1600
@@ -455,32 +457,24 @@ class ScreenshotRegistrationCog(commands.Cog):
                 ratio = max_size / max(img.size)
                 new_size = tuple(int(dim * ratio) for dim in img.size)
                 img = img.resize(new_size, Image.Resampling.LANCZOS)
+                print(f"📏 Resized to: {new_size}")
             
             # Convert to base64
             buffer = BytesIO()
             img.save(buffer, format='PNG')
             img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            print(f"✅ Image converted to base64 ({len(img_b64)} chars)")
             
-            # Gemini prompt
+            # Gemini prompt - simplified for better OCR
             prompt = """
-You are reading a VALORANT Mobile player profile screenshot.
+Read this VALORANT Mobile profile screenshot and extract:
+1. IGN (player username)
+2. Player ID (the number with # symbol)
 
-Extract the following information:
-1. IGN (In-Game Name) - the player's username
-2. Player ID - the numeric ID (format: 1234 or #1234)
+Return ONLY this JSON format:
+{"ign": "username", "id": "12345"}
 
-Return RAW JSON ONLY (no markdown):
-{
-  "ign": "PlayerName",
-  "id": "1234567"
-}
-
-Rules:
-- Find the player's IGN (usually displayed prominently)
-- Find the Player ID (numbers, may have # prefix)
-- Remove # from ID if present
-- If IGN not found, set to null
-- If ID not found, set to null
+If you can't find something, use null.
 """
             
             # Try Gemini models
@@ -492,6 +486,7 @@ Rules:
             
             for version, model in models:
                 try:
+                    print(f"🔄 Trying model: {model}")
                     url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent"
                     
                     payload = {
@@ -513,13 +508,20 @@ Rules:
                             url,
                             params={"key": self.gemini_api_key},
                             json=payload,
-                            headers={"Content-Type": "application/json"}
+                            headers={"Content-Type": "application/json"},
+                            timeout=aiohttp.ClientTimeout(total=30)
                         ) as resp:
+                            response_text = await resp.text()
+                            
                             if resp.status != 200:
+                                print(f"❌ API Error {resp.status}: {response_text[:200]}")
                                 continue
                             
                             data = await resp.json()
+                            print(f"✅ Got response from {model}")
+                            
                             text_response = data['candidates'][0]['content']['parts'][0]['text']
+                            print(f"📝 OCR Response: {text_response[:200]}")
                             
                             # Parse JSON
                             json_match = re.search(r'\{.*\}', text_response, re.DOTALL)
@@ -528,20 +530,28 @@ Rules:
                                 ign = result.get('ign')
                                 player_id = result.get('id')
                                 
+                                print(f"🎯 Extracted - IGN: {ign}, ID: {player_id}")
+                                
                                 # Clean up ID
                                 if player_id:
                                     player_id = str(player_id).replace('#', '').strip()
                                 
-                                return ign, player_id
+                                if ign and player_id:
+                                    return ign, player_id
                 
                 except Exception as e:
-                    print(f"OCR error with {model}: {e}")
+                    print(f"❌ OCR error with {model}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     continue
             
+            print("❌ All OCR models failed")
             return None, None
             
         except Exception as e:
-            print(f"Image processing error: {e}")
+            print(f"❌ Image processing error: {e}")
+            import traceback
+            traceback.print_exc()
             return None, None
 
 
