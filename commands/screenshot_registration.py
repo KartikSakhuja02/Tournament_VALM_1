@@ -258,7 +258,7 @@ class ScreenshotRegistrationCog(commands.Cog):
                     for member in staff_role.members:
                         try:
                             await thread.add_user(member)
-                            await asyncio.sleep(0.5)  # Small delay to avoid rate limits
+                            await asyncio.sleep(1)  # 1 second delay to avoid rate limits
                         except:
                             pass
             
