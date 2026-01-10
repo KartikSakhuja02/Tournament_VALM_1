@@ -477,11 +477,11 @@ Return ONLY this JSON format:
 If you can't find something, use null.
 """
             
-            # Try Gemini models
+            # Try Gemini models (stable models first for better quota)
             models = [
-                ("v1beta", "gemini-2.0-flash-exp"),
-                ("v1beta", "gemini-exp-1206"),
-                ("v1beta", "gemini-1.5-pro"),
+                ("v1beta", "gemini-1.5-flash"),      # Stable, best quota
+                ("v1beta", "gemini-1.5-pro"),        # Stable, good for complex OCR
+                ("v1beta", "gemini-2.0-flash-exp"),  # Experimental, may have limits
             ]
             
             for version, model in models:
@@ -514,7 +514,16 @@ If you can't find something, use null.
                             response_text = await resp.text()
                             
                             if resp.status != 200:
-                                print(f"❌ API Error {resp.status}: {response_text[:200]}")
+                                print(f"❌ API Error {resp.status} for {model}:")
+                                print(f"   Response: {response_text[:500]}")
+                                
+                                # Check for specific error types
+                                if "RESOURCE_EXHAUSTED" in response_text or "429" in str(resp.status):
+                                    print(f"⚠️  Rate limit/quota error - trying next model...")
+                                elif "API_KEY_INVALID" in response_text or "401" in str(resp.status):
+                                    print(f"⚠️  Invalid API key - check your GEMINI_API_KEY")
+                                    return None, None  # Stop trying other models
+                                
                                 continue
                             
                             data = await resp.json()
