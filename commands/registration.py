@@ -113,7 +113,8 @@ class ConsentView(discord.ui.View):
                 discord_id=interaction.user.id,
                 ign=self.ign,
                 player_id=self.player_id,
-                region=self.region
+                region=self.region,
+                tournament_notifications=True
             )
             
             # Create player stats entry

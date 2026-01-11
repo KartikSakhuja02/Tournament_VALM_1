@@ -60,17 +60,18 @@ class Database:
         discord_id: int,
         ign: str,
         player_id: str,
-        region: str
+        region: str,
+        tournament_notifications: bool = True
     ) -> Dict:
         """Create a new player"""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO players (discord_id, ign, player_id, region)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO players (discord_id, ign, player_id, region, tournament_notifications)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING *
                 """,
-                discord_id, ign, player_id, region
+                discord_id, ign, player_id, region, tournament_notifications
             )
             return dict(row)
     
@@ -120,6 +121,14 @@ class Database:
                 rows = await conn.fetch(
                     "SELECT * FROM players ORDER BY registered_at DESC"
                 )
+            return [dict(row) for row in rows]
+    
+    async def get_players_with_notifications(self) -> List[Dict]:
+        """Get all players who consented to tournament notifications"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM players WHERE tournament_notifications = TRUE ORDER BY registered_at DESC"
+            )
             return [dict(row) for row in rows]
     
     # Player stats operations

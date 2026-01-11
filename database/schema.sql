@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS players (
     ign VARCHAR(50) UNIQUE NOT NULL,
     player_id VARCHAR(20) NOT NULL,
     region VARCHAR(10) NOT NULL,
+    tournament_notifications BOOLEAN DEFAULT TRUE,
     registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
