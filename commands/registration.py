@@ -6,7 +6,7 @@ import asyncio
 from database.db import db
 
 
-class RegistrationModal(discord.ui.Modal, title="🎮 Player Registration"):
+class RegistrationModal(discord.ui.Modal, title="Player Registration"):
     """Modal form for player registration"""
     
     ign = discord.ui.TextInput(
@@ -39,25 +39,25 @@ class RegistrationModal(discord.ui.Modal, title="🎮 Player Registration"):
         
         # Create consent embed
         embed = discord.Embed(
-            title="📢 Tournament Notifications & Terms",
+            title="Tournament Notifications & Terms",
             description=(
                 "╔═══════════════════════════════════╗\n"
                 "║  **VALORANT Mobile India Community**  ║\n"
                 "╚═══════════════════════════════════╝\n\n"
                 "We organize **regular competitive tournaments** for the Indian VALORANT Mobile community.\n\n"
-                "✨ **What You'll Receive:**\n"
-                "• 🔔 Instant tournament announcements\n"
-                "• 📋 Registration links & deadlines\n"
-                "• 📅 Match schedules & brackets\n"
-                "• 🏆 Format details & prize information\n"
-                "• ⚡ Live updates during tournaments\n\n"
+                "**What You'll Receive:**\n"
+                "• Instant tournament announcements\n"
+                "• Registration links & deadlines\n"
+                "• Match schedules & brackets\n"
+                "• Format details & prize information\n"
+                "• Live updates during tournaments\n\n"
                 "**By consenting, you agree to receive these notifications.**\n\n"
                 "*Stay informed. Stay ready. Don't miss a tournament.*"
             ),
             color=0xFF4654  # VALORANT red
         )
         
-        embed.set_footer(text="⚠️ Please review and provide your consent below", icon_url="https://i.imgur.com/7lGjguC.png")
+        embed.set_footer(text="Please review and provide your consent below", icon_url="https://i.imgur.com/7lGjguC.png")
         
         # Show consent buttons
         consent_view = ConsentView(
@@ -80,7 +80,7 @@ class ConsentView(discord.ui.View):
         self.player_id = player_id
         self.region = region
     
-    @discord.ui.button(label="✓ I Consent", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="I Consent", style=discord.ButtonStyle.success)
     async def consent_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle consent"""
         if interaction.user.id != self.user_id:
@@ -96,7 +96,7 @@ class ConsentView(discord.ui.View):
             
             if existing_player:
                 await interaction.followup.send(
-                    "❌ You are already registered! You can only register once.",
+                    "You are already registered! You can only register once.",
                     ephemeral=False
                 )
                 await asyncio.sleep(3)
@@ -108,7 +108,7 @@ class ConsentView(discord.ui.View):
             existing_ign = await db.get_player_by_ign(self.ign)
             if existing_ign:
                 await interaction.followup.send(
-                    f"❌ The IGN `{self.ign}` is already registered by another player. Please use a different IGN.",
+                    f"The IGN `{self.ign}` is already registered by another player. Please use a different IGN.",
                     ephemeral=False
                 )
                 return
@@ -130,13 +130,13 @@ class ConsentView(discord.ui.View):
         except Exception as e:
             print(f"❌ Database error during registration: {e}")
             await interaction.followup.send(
-                "❌ An error occurred while saving your registration. Please try again later.",
+                "An error occurred while saving your registration. Please try again later.",
                 ephemeral=False
             )
             return
         
         success_embed = discord.Embed(
-            title="🎉 Registration Complete!",
+            title="Registration Complete!",
             description=(
                 f"**Welcome to the VALORANT Mobile India Community, {self.ign}!**\n\n"
                 "Your registration has been successfully processed.\n"
@@ -146,17 +146,17 @@ class ConsentView(discord.ui.View):
             color=0x00FF7F  # Spring green
         )
         
-        success_embed.add_field(name="🎮 IGN", value=f"```{self.ign}```", inline=True)
-        success_embed.add_field(name="🔢 Player ID", value=f"```{self.player_id}```", inline=True)
-        success_embed.add_field(name="🌍 Region", value=f"```{self.region}```", inline=True)
+        success_embed.add_field(name="IGN", value=f"```{self.ign}```", inline=True)
+        success_embed.add_field(name="Player ID", value=f"```{self.player_id}```", inline=True)
+        success_embed.add_field(name="Region", value=f"```{self.region}```", inline=True)
         
         success_embed.add_field(
-            name="✅ What's Next?",
+            name="What's Next?",
             value="You'll receive notifications for all upcoming tournaments. Good luck and have fun!",
             inline=False
         )
         
-        success_embed.set_footer(text="🏆 Tournament notifications enabled • This thread will close in 5 seconds")
+        success_embed.set_footer(text="Tournament notifications enabled | This thread will close in 5 seconds")
         
         await interaction.followup.send(embed=success_embed)
         
@@ -165,7 +165,7 @@ class ConsentView(discord.ui.View):
         if isinstance(interaction.channel, discord.Thread):
             await interaction.channel.delete()
     
-    @discord.ui.button(label="✗ I Don't Consent", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="I Don't Consent", style=discord.ButtonStyle.secondary)
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle decline"""
         if interaction.user.id != self.user_id:
@@ -173,7 +173,7 @@ class ConsentView(discord.ui.View):
             return
         
         decline_embed = discord.Embed(
-            title="❌ Registration Cancelled",
+            title="Registration Cancelled",
             description=(
                 "You have declined to receive tournament notifications.\n\n"
                 "No data has been saved.\n\n"
@@ -201,8 +201,7 @@ class RegistrationButtons(discord.ui.View):
     @discord.ui.button(
         label="Register",
         style=discord.ButtonStyle.primary,
-        custom_id="register",
-        emoji="📝"
+        custom_id="register"
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle registration button click"""
@@ -237,7 +236,7 @@ class RegistrationButtons(discord.ui.View):
             
             # Send welcome message in thread
             welcome_embed = discord.Embed(
-                title="🎮 Welcome to Registration!",
+                title="Welcome to Registration!",
                 description=(
                     f"Hey {interaction.user.mention}!\n\n"
                     "Thank you for your interest in joining the tournament.\n\n"
@@ -251,8 +250,7 @@ class RegistrationButtons(discord.ui.View):
             form_view = discord.ui.View(timeout=300)
             form_button = discord.ui.Button(
                 label="Fill Form",
-                style=discord.ButtonStyle.primary,
-                emoji="📋"
+                style=discord.ButtonStyle.primary
             )
             
             async def form_callback(form_interaction: discord.Interaction):
@@ -301,7 +299,7 @@ class RegistrationCog(commands.Cog):
     def create_registration_embed(self):
         """Create the registration embed message"""
         embed = discord.Embed(
-            title="🎮 VALORANT Tournament Registration",
+            title="VALORANT Tournament Registration",
             description="Welcome to the Bot! Click the button below to register for the tournament.",
             color=discord.Color.red()  # VALORANT red theme
         )
