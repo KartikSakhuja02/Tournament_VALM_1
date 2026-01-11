@@ -15,7 +15,7 @@ from database.db import db
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # Required to check member roles
-intents.presences = True  # Required to check member online status
+# intents.presences = True  # Optional - for checking online status (requires privileged intent)
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def load_commands():

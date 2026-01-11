@@ -219,7 +219,7 @@ class RegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add head mods (online only) - do this first with priority
+            # Add head mods - add all (online status check requires privileged intent)
             headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
             if headmod_role_id:
                 try:
@@ -227,17 +227,12 @@ class RegistrationButtons(discord.ui.View):
                     if headmod_role:
                         print(f"Found {len(headmod_role.members)} members with Head Mod role")
                         for member in headmod_role.members:
-                            print(f"Head Mod: {member.name} - Status: {member.status}")
-                            # Only add if member is online (not offline or invisible)
-                            if member.status != discord.Status.offline and member.status != discord.Status.invisible:
-                                try:
-                                    await thread.add_user(member)
-                                    print(f"✓ Added {member.name} to thread")
-                                    await asyncio.sleep(0.5)
-                                except Exception as e:
-                                    print(f"✗ Failed to add {member.name}: {e}")
-                            else:
-                                print(f"  Skipped {member.name} (offline/invisible)")
+                            try:
+                                await thread.add_user(member)
+                                print(f"✓ Added Head Mod: {member.name} to thread")
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
                     else:
                         print(f"Head Mod role not found with ID: {headmod_role_id}")
                 except Exception as e:
