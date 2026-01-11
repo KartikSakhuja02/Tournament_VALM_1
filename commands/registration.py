@@ -188,6 +188,51 @@ class ConsentView(discord.ui.View):
             # Create player stats entry
             await db.create_player_stats(interaction.user.id)
             
+            # Assign region role(s)
+            roles_to_assign = []
+            
+            # Define role mappings
+            role_mapping = {
+                'NA': 'AMERICAS_ROLE_ID',
+                'BR': 'AMERICAS_ROLE_ID',
+                'LATAM': 'AMERICAS_ROLE_ID',
+                'EU': 'EMEA_ROLE_ID',
+                'India': 'INDIA_ROLE_ID',
+                'AP': 'APAC_ROLE_ID',
+                'KR': 'APAC_ROLE_ID',
+                'CN': 'CN_ROLE_ID'
+            }
+            
+            # Get the role ID for the selected region
+            role_env_key = role_mapping.get(self.region)
+            if role_env_key:
+                role_id = os.getenv(role_env_key)
+                if role_id:
+                    roles_to_assign.append(int(role_id))
+            
+            # Special case: India also gets APAC role
+            if self.region == 'India':
+                apac_role_id = os.getenv('APAC_ROLE_ID')
+                if apac_role_id:
+                    roles_to_assign.append(int(apac_role_id))
+            
+            # Assign roles to the user
+            if roles_to_assign:
+                try:
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if member:
+                        for role_id in roles_to_assign:
+                            role = interaction.guild.get_role(role_id)
+                            if role:
+                                await member.add_roles(role)
+                                print(f"✓ Assigned role: {role.name} to {self.ign}")
+                            else:
+                                print(f"✗ Role with ID {role_id} not found")
+                    else:
+                        print(f"✗ Member not found: {interaction.user.id}")
+                except Exception as e:
+                    print(f"✗ Error assigning roles: {e}")
+            
             print(f"✅ Player registered: {self.ign} (Discord ID: {interaction.user.id})")
             
         except Exception as e:
