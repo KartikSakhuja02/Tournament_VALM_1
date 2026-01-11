@@ -182,6 +182,9 @@ class RegistrationButtons(discord.ui.View):
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle registration button click"""
+        # Respond immediately to prevent timeout
+        await interaction.response.defer(ephemeral=True)
+        
         # Create private thread
         try:
             thread = await interaction.channel.create_thread(
@@ -193,7 +196,7 @@ class RegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add staff members (if configured)
+            # Add staff members (if configured) - do this in background to avoid slowdown
             staff_role_id = os.getenv("STAFF_ROLE_ID")
             if staff_role_id:
                 try:
@@ -245,18 +248,25 @@ class RegistrationButtons(discord.ui.View):
             
             await thread.send(embed=welcome_embed, view=form_view)
             
-            # Respond to button click
-            await interaction.response.send_message(
+            # Respond to button click with followup (since we deferred)
+            await interaction.followup.send(
                 f"Registration thread created: {thread.mention}",
                 ephemeral=True
             )
             
         except Exception as e:
             print(f"Error creating registration thread: {e}")
-            await interaction.response.send_message(
-                "An error occurred. Please try again later.",
-                ephemeral=True
-            )
+            import traceback
+            traceback.print_exc()
+            
+            try:
+                await interaction.followup.send(
+                    "An error occurred. Please try again later.",
+                    ephemeral=True
+                )
+            except:
+                # If followup also fails, the interaction already expired
+                pass
 
 class RegistrationCog(commands.Cog):
     """Player registration system"""
