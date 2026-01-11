@@ -21,8 +21,7 @@ async def load_commands():
     """Load all command modules"""
     commands_to_load = [
         "commands.ping",
-        "commands.registration",
-        "commands.screenshot_registration"
+        "commands.registration"
     ]
     
     for command in commands_to_load:
