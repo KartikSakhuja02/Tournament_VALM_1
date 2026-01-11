@@ -13,28 +13,18 @@ import json
 class RegistrationButtons(discord.ui.View):
     """Persistent view with registration buttons"""
     
-    def __init__(self, cog):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.cog = cog
     
     @discord.ui.button(
-        label="Screenshot Register",
+        label="Register",
         style=discord.ButtonStyle.primary,
-        custom_id="screenshot_register"
+        custom_id="register"
     )
-    async def screenshot_register(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle screenshot registration button click"""
-        await self.cog.handle_screenshot_registration(interaction)
-    
-    @discord.ui.button(
-        label="Manual Register",
-        style=discord.ButtonStyle.secondary,
-        custom_id="manual_register"
-    )
-    async def manual_register(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle manual registration button click"""
+    async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle registration button click"""
         await interaction.response.send_message(
-            "Manual registration selected! (Functionality coming soon)",
+            "Registration selected! (Functionality coming soon)",
             ephemeral=True
         )
 
@@ -48,23 +38,17 @@ class RegistrationCog(commands.Cog):
         """Create the registration embed message"""
         embed = discord.Embed(
             title="🎮 VALORANT Tournament Registration",
-            description="Welcome to the Bot! Register yourself using one of the options below:",
+            description="Welcome to the Bot! Click the button below to register for the tournament.",
             color=discord.Color.red()  # VALORANT red theme
         )
         
         embed.add_field(
-            name="Screenshot Register",
-            value="Upload a screenshot of your team details for quick registration\n**Requirements:** Clear screenshot of your profile, Region",
+            name="Registration Requirements",
+            value="• IGN (In-Game Name)\n• Player ID\n• Region",
             inline=False
         )
         
-        embed.add_field(
-            name="Manual Register",
-            value="Manually enter your team information step by step\n**Requirements:** IGN, In-game ID, Region",
-            inline=False
-        )
-        
-        embed.set_footer(text="Click a button below to start registration")
+        embed.set_footer(text="Click the button below to start registration")
         
         return embed
     
@@ -83,9 +67,7 @@ class RegistrationCog(commands.Cog):
             
             embed = self.create_registration_embed()
             
-            # Get screenshot registration cog
-            screenshot_cog = self.bot.get_cog("ScreenshotRegistrationCog")
-            view = RegistrationButtons(screenshot_cog)
+            view = RegistrationButtons()
             
             # Load and attach logo
             logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
