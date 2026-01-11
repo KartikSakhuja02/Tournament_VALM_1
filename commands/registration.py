@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import asyncio
+from database.db import db
 
 
 class RegistrationModal(discord.ui.Modal, title="🎮 Player Registration"):
@@ -83,7 +84,50 @@ class ConsentView(discord.ui.View):
         
         await interaction.response.defer()
         
-        # TODO: Save to database here
+        # Save to database
+        try:
+            # Check if player already exists
+            existing_player = await db.get_player_by_discord_id(interaction.user.id)
+            
+            if existing_player:
+                await interaction.followup.send(
+                    "❌ You are already registered! You can only register once.",
+                    ephemeral=False
+                )
+                await asyncio.sleep(3)
+                if isinstance(interaction.channel, discord.Thread):
+                    await interaction.channel.delete()
+                return
+            
+            # Check if IGN is already taken
+            existing_ign = await db.get_player_by_ign(self.ign)
+            if existing_ign:
+                await interaction.followup.send(
+                    f"❌ The IGN `{self.ign}` is already registered by another player. Please use a different IGN.",
+                    ephemeral=False
+                )
+                return
+            
+            # Create player in database
+            await db.create_player(
+                discord_id=interaction.user.id,
+                ign=self.ign,
+                player_id=self.player_id,
+                region=self.region
+            )
+            
+            # Create player stats entry
+            await db.create_player_stats(interaction.user.id)
+            
+            print(f"✅ Player registered: {self.ign} (Discord ID: {interaction.user.id})")
+            
+        except Exception as e:
+            print(f"❌ Database error during registration: {e}")
+            await interaction.followup.send(
+                "❌ An error occurred while saving your registration. Please try again later.",
+                ephemeral=False
+            )
+            return
         
         success_embed = discord.Embed(
             title="✅ Registration Successful!",
