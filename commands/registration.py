@@ -219,7 +219,24 @@ class RegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add staff members (if configured) - do this in background to avoid slowdown
+            # Add head mods (online only) - do this first with priority
+            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
+            if headmod_role_id:
+                try:
+                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
+                    if headmod_role:
+                        for member in headmod_role.members:
+                            # Only add if member is online
+                            if member.status != discord.Status.offline:
+                                try:
+                                    await thread.add_user(member)
+                                    await asyncio.sleep(0.5)
+                                except:
+                                    pass
+                except:
+                    pass
+            
+            # Add staff members (if configured)
             staff_role_id = os.getenv("STAFF_ROLE_ID")
             if staff_role_id:
                 try:
