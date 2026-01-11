@@ -25,17 +25,78 @@ class RegistrationModal(discord.ui.Modal, title="Player Registration"):
         style=discord.TextStyle.short
     )
     
-    region = discord.ui.TextInput(
-        label="Region",
-        placeholder="Enter your region (e.g., Asia, EU, NA)",
-        required=True,
-        max_length=20,
-        style=discord.TextStyle.short
-    )
-    
     async def on_submit(self, interaction: discord.Interaction):
-        """Handle form submission"""
+        """Handle form submission - show region selector"""
         await interaction.response.defer()
+        
+        # Create region selection view
+        region_view = RegionSelectView(
+            user_id=interaction.user.id,
+            ign=self.ign.value,
+            player_id=self.player_id.value
+        )
+        
+        embed = discord.Embed(
+            title="Select Your Region",
+            description=(
+                f"**IGN:** `{self.ign.value}`\n"
+                f"**Player ID:** `{self.player_id.value}`\n\n"
+                "Please select your region from the dropdown menu below."
+            ),
+            color=0xFF4654
+        )
+        
+        await interaction.followup.send(embed=embed, view=region_view)
+
+
+class RegionSelectView(discord.ui.View):
+    """View with region dropdown"""
+    
+    def __init__(self, user_id: int, ign: str, player_id: str):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.ign = ign
+        self.player_id = player_id
+        
+        # Add region select menu
+        self.add_item(RegionSelect(user_id, ign, player_id))
+
+
+class RegionSelect(discord.ui.Select):
+    """Dropdown for region selection"""
+    
+    def __init__(self, user_id: int, ign: str, player_id: str):
+        self.user_id = user_id
+        self.ign = ign
+        self.player_id = player_id
+        
+        options = [
+            discord.SelectOption(label="North America (NA)", value="NA"),
+            discord.SelectOption(label="Europe (EU)", value="EU"),
+            discord.SelectOption(label="Asia-Pacific (AP)", value="AP"),
+            discord.SelectOption(label="India", value="India"),
+            discord.SelectOption(label="Brazil (BR)", value="BR"),
+            discord.SelectOption(label="Latin America (LATAM)", value="LATAM"),
+            discord.SelectOption(label="Korea (KR)", value="KR"),
+            discord.SelectOption(label="China (CN)", value="CN")
+        ]
+        
+        super().__init__(
+            placeholder="Choose your region...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle region selection"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your registration.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        selected_region = self.values[0]
         
         # Create consent embed
         embed = discord.Embed(
@@ -61,11 +122,13 @@ class RegistrationModal(discord.ui.Modal, title="Player Registration"):
         
         # Show consent buttons
         consent_view = ConsentView(
-            user_id=interaction.user.id,
-            ign=self.ign.value,
-            player_id=self.player_id.value,
-            region=self.region.value
+            user_id=self.user_id,
+            ign=self.ign,
+            player_id=self.player_id,
+            region=selected_region
         )
+        
+        await interaction.followup.send(embed=embed, view=consent_view)
         
         await interaction.followup.send(embed=embed, view=consent_view)
 
