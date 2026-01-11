@@ -289,6 +289,70 @@ class RegistrationButtons(discord.ui.View):
             except:
                 # If followup also fails, the interaction already expired
                 pass
+    
+    @discord.ui.button(
+        label="Check Notification Status",
+        style=discord.ButtonStyle.secondary,
+        custom_id="check_status"
+    )
+    async def check_status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Check user's notification status"""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Check if user is registered
+            player = await db.get_player_by_discord_id(interaction.user.id)
+            
+            if not player:
+                # User not registered
+                embed = discord.Embed(
+                    title="Not Registered",
+                    description=(
+                        "You are not registered for tournaments yet.\n\n"
+                        "Click the **Register** button to sign up and receive tournament notifications."
+                    ),
+                    color=0xFFA500  # Orange
+                )
+                embed.set_footer(text="Register now to stay updated!")
+                
+            elif player.get('tournament_notifications', False):
+                # User is registered and notifications are ON
+                embed = discord.Embed(
+                    title="Notification Status: ACTIVE",
+                    description=(
+                        f"**IGN:** `{player['ign']}`\n"
+                        f"**Player ID:** `{player['player_id']}`\n"
+                        f"**Region:** `{player['region']}`\n\n"
+                        "You will receive notifications for all upcoming tournaments.\n\n"
+                        "Status: **ENABLED**"
+                    ),
+                    color=0x00FF7F  # Green
+                )
+                embed.set_footer(text=f"Registered on: {player['registered_at'].strftime('%B %d, %Y')}")
+                
+            else:
+                # User is registered but notifications are OFF
+                embed = discord.Embed(
+                    title="Notification Status: INACTIVE",
+                    description=(
+                        f"**IGN:** `{player['ign']}`\n"
+                        f"**Player ID:** `{player['player_id']}`\n"
+                        f"**Region:** `{player['region']}`\n\n"
+                        "You are registered but notifications are currently disabled.\n\n"
+                        "Status: **DISABLED**"
+                    ),
+                    color=0xFF4654  # Red
+                )
+                embed.set_footer(text="Contact staff to enable notifications")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            print(f"Error checking notification status: {e}")
+            await interaction.followup.send(
+                "An error occurred while checking your status. Please try again later.",
+                ephemeral=True
+            )
 
 class RegistrationCog(commands.Cog):
     """Player registration system"""
