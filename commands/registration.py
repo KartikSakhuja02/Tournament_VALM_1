@@ -219,7 +219,28 @@ class RegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add head mods - add all (online status check requires privileged intent)
+            # Add administrators
+            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+            if administrator_role_id:
+                try:
+                    admin_role = interaction.guild.get_role(int(administrator_role_id))
+                    if admin_role:
+                        print(f"Found {len(admin_role.members)} members with Administrator role")
+                        for member in admin_role.members:
+                            try:
+                                await thread.add_user(member)
+                                print(f"✓ Added Administrator: {member.name} to thread")
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                    else:
+                        print(f"Administrator role not found with ID: {administrator_role_id}")
+                except Exception as e:
+                    print(f"Error processing administrators: {e}")
+            else:
+                print("ADMINISTRATOR_ROLE_ID not set in .env")
+            
+            # Add head mods
             headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
             if headmod_role_id:
                 try:
