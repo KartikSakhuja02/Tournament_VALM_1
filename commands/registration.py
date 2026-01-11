@@ -314,43 +314,127 @@ class RegistrationButtons(discord.ui.View):
                     color=0xFFA500  # Orange
                 )
                 embed.set_footer(text="Register now to stay updated!")
-                
-            elif player.get('tournament_notifications', False):
-                # User is registered and notifications are ON
-                embed = discord.Embed(
-                    title="Notification Status: ACTIVE",
-                    description=(
-                        f"**IGN:** `{player['ign']}`\n"
-                        f"**Player ID:** `{player['player_id']}`\n"
-                        f"**Region:** `{player['region']}`\n\n"
-                        "You will receive notifications for all upcoming tournaments.\n\n"
-                        "Status: **ENABLED**"
-                    ),
-                    color=0x00FF7F  # Green
-                )
-                embed.set_footer(text=f"Registered on: {player['registered_at'].strftime('%B %d, %Y')}")
+                await interaction.followup.send(embed=embed, ephemeral=True)
                 
             else:
-                # User is registered but notifications are OFF
-                embed = discord.Embed(
-                    title="Notification Status: INACTIVE",
-                    description=(
-                        f"**IGN:** `{player['ign']}`\n"
-                        f"**Player ID:** `{player['player_id']}`\n"
-                        f"**Region:** `{player['region']}`\n\n"
-                        "You are registered but notifications are currently disabled.\n\n"
-                        "Status: **DISABLED**"
-                    ),
-                    color=0xFF4654  # Red
-                )
-                embed.set_footer(text="Contact staff to enable notifications")
-            
-            await interaction.followup.send(embed=embed, ephemeral=True)
+                # User is registered - show status with toggle buttons
+                is_enabled = player.get('tournament_notifications', False)
+                
+                if is_enabled:
+                    embed = discord.Embed(
+                        title="Notification Status: ACTIVE",
+                        description=(
+                            f"**IGN:** `{player['ign']}`\n"
+                            f"**Player ID:** `{player['player_id']}`\n"
+                            f"**Region:** `{player['region']}`\n\n"
+                            "You will receive notifications for all upcoming tournaments.\n\n"
+                            "Status: **ENABLED**"
+                        ),
+                        color=0x00FF7F  # Green
+                    )
+                    embed.set_footer(text=f"Registered on: {player['registered_at'].strftime('%B %d, %Y')}")
+                else:
+                    embed = discord.Embed(
+                        title="Notification Status: INACTIVE",
+                        description=(
+                            f"**IGN:** `{player['ign']}`\n"
+                            f"**Player ID:** `{player['player_id']}`\n"
+                            f"**Region:** `{player['region']}`\n\n"
+                            "You are registered but notifications are currently disabled.\n\n"
+                            "Status: **DISABLED**"
+                        ),
+                        color=0xFF4654  # Red
+                    )
+                    embed.set_footer(text=f"Registered on: {player['registered_at'].strftime('%B %d, %Y')}")
+                
+                # Create toggle view
+                toggle_view = NotificationToggleView(interaction.user.id, is_enabled)
+                await interaction.followup.send(embed=embed, view=toggle_view, ephemeral=True)
             
         except Exception as e:
             print(f"Error checking notification status: {e}")
             await interaction.followup.send(
                 "An error occurred while checking your status. Please try again later.",
+                ephemeral=True
+            )
+
+
+class NotificationToggleView(discord.ui.View):
+    """View with notification toggle buttons"""
+    
+    def __init__(self, user_id: int, current_status: bool):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.current_status = current_status
+    
+    @discord.ui.button(label="Enable Notifications", style=discord.ButtonStyle.success)
+    async def enable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Enable tournament notifications"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your status panel.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        try:
+            # Update database
+            await db.update_player(
+                discord_id=interaction.user.id,
+                tournament_notifications=True
+            )
+            
+            success_embed = discord.Embed(
+                title="Notifications Enabled",
+                description=(
+                    "Tournament notifications have been enabled successfully!\n\n"
+                    "You will now receive updates about all upcoming tournaments."
+                ),
+                color=0x00FF7F  # Green
+            )
+            
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
+            print(f"✓ Notifications enabled for user {interaction.user.id}")
+            
+        except Exception as e:
+            print(f"Error enabling notifications: {e}")
+            await interaction.followup.send(
+                "An error occurred. Please try again later.",
+                ephemeral=True
+            )
+    
+    @discord.ui.button(label="Disable Notifications", style=discord.ButtonStyle.danger)
+    async def disable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Disable tournament notifications"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your status panel.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        try:
+            # Update database
+            await db.update_player(
+                discord_id=interaction.user.id,
+                tournament_notifications=False
+            )
+            
+            warning_embed = discord.Embed(
+                title="Notifications Disabled",
+                description=(
+                    "Tournament notifications have been disabled.\n\n"
+                    "You will no longer receive updates about upcoming tournaments.\n\n"
+                    "You can re-enable them anytime by using the **Check Notification Status** button."
+                ),
+                color=0xFF4654  # Red
+            )
+            
+            await interaction.followup.send(embed=warning_embed, ephemeral=True)
+            print(f"✓ Notifications disabled for user {interaction.user.id}")
+            
+        except Exception as e:
+            print(f"Error disabling notifications: {e}")
+            await interaction.followup.send(
+                "An error occurred. Please try again later.",
                 ephemeral=True
             )
 
