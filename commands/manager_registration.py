@@ -14,6 +14,7 @@ from datetime import datetime
 
 # Environment variables
 REGISTRATION_CHANNEL_ID = int(os.getenv("REGISTRATION_CHANNEL_ID"))
+MANAGER_REGISTRATION_CHANNEL_ID = int(os.getenv("MANAGER_REGISTRATION_CHANNEL_ID"))
 BOT_LOGS_CHANNEL_ID = int(os.getenv("BOT_LOGS_CHANNEL_ID"))
 STAFF_ROLE_ID = int(os.getenv("STAFF_ROLE_ID"))
 HEADMOD_ROLE_ID = int(os.getenv("HEADMOD_ROLE_ID"))
@@ -376,6 +377,52 @@ class ManagerRegistrationCog(commands.Cog):
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Send manager registration UI when bot starts"""
+        try:
+            channel = self.bot.get_channel(MANAGER_REGISTRATION_CHANNEL_ID)
+            if not channel:
+                print(f"✗ Manager registration channel not found: {MANAGER_REGISTRATION_CHANNEL_ID}")
+                return
+            
+            # Check if UI already exists (check last 10 messages)
+            async for message in channel.history(limit=10):
+                if message.author == self.bot.user and message.embeds:
+                    if "Manager Registration" in message.embeds[0].title:
+                        print(f"✓ Manager registration UI already exists in {channel.name}")
+                        return
+            
+            # Create embed
+            embed = discord.Embed(
+                title="🎮 VALORANT Mobile Tournament - Manager Registration",
+                description=(
+                    "**Welcome to Manager Registration!**\n\n"
+                    "Register as a **Manager** to help run an existing team.\n\n"
+                    "**Requirements:**\n"
+                    "✓ Must NOT be registered as a player\n"
+                    "✓ Must be approved by team captain or existing managers\n"
+                    "✓ Maximum 2 managers per team\n\n"
+                    "**Manager Responsibilities:**\n"
+                    "• Help captain manage team operations\n"
+                    "• Approve/reject new manager requests\n"
+                    "• Coordinate team schedules and practices\n\n"
+                    "Click **Register as Manager** below to begin!"
+                ),
+                color=discord.Color.blue()
+            )
+            
+            # Send message with button
+            await channel.send(
+                embed=embed,
+                view=ManagerRegistrationButtons()
+            )
+            
+            print(f"✓ Manager registration UI sent to {channel.name}")
+            
+        except Exception as e:
+            print(f"✗ Failed to send manager registration UI: {e}")
     
     @app_commands.command(name="setup_manager_registration")
     @app_commands.describe(channel="The channel where the manager registration UI will be posted")
