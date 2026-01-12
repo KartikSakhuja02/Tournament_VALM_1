@@ -243,25 +243,23 @@ class ConsentView(discord.ui.View):
                 try:
                     logs_channel = interaction.guild.get_channel(int(bot_logs_channel_id))
                     if logs_channel:
+                        # Format timestamp
+                        import datetime
+                        timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+                        
                         log_embed = discord.Embed(
-                            title="New Player Registration",
-                            color=0x00FF7F,
-                            timestamp=discord.utils.utcnow()
+                            title="New Player Registration (Thread - Manual)",
+                            description=(
+                                f"**Player**\n"
+                                f"{interaction.user.mention} ({interaction.user.name})\n\n"
+                                f"**IGN                    Player ID                    Region**\n"
+                                f"{self.ign}                    {self.player_id}                    {self.region}\n\n"
+                                f"**User ID:** {interaction.user.id} • **Method:** Thread Manual • {timestamp}"
+                            ),
+                            color=0x5865F2
                         )
                         
-                        log_embed.add_field(name="Player", value=f"{interaction.user.mention} ({interaction.user.name})", inline=False)
-                        log_embed.add_field(name="IGN", value=f"```{self.ign}```", inline=True)
-                        log_embed.add_field(name="Player ID", value=f"```{self.player_id}```", inline=True)
-                        log_embed.add_field(name="Region", value=f"```{self.region}```", inline=True)
-                        
-                        if assigned_roles:
-                            log_embed.add_field(name="Roles Assigned", value=", ".join(assigned_roles), inline=False)
-                        
-                        log_embed.add_field(name="Discord ID", value=f"`{interaction.user.id}`", inline=True)
-                        log_embed.add_field(name="Account Created", value=f"<t:{int(interaction.user.created_at.timestamp())}:R>", inline=True)
-                        
                         log_embed.set_thumbnail(url=interaction.user.display_avatar.url)
-                        log_embed.set_footer(text=f"Registration ID: {interaction.user.id}")
                         
                         await logs_channel.send(embed=log_embed)
                         print(f"✓ Sent registration log to bot-logs channel")
