@@ -126,23 +126,38 @@ class CoachTeamSelect(discord.ui.Select):
         )
         
         # Get captain
-        captain = await interaction.guild.fetch_member(team['captain_discord_id'])
+        try:
+            captain = await interaction.guild.fetch_member(team['captain_discord_id'])
+        except discord.NotFound:
+            await interaction.followup.send(
+                "❌ Team captain not found in this server. Please contact an administrator.",
+                ephemeral=True
+            )
+            return
         
         # Get existing managers
         managers = await db.get_team_members(team_id, 'manager')
         
         # Add captain and managers to thread
         thread = interaction.channel
+        await asyncio.sleep(0.5)  # Small delay to ensure thread is ready
+        
+        # Add captain
         try:
             await thread.add_user(captain)
-            for manager in managers:
-                try:
-                    manager_member = await interaction.guild.fetch_member(manager['discord_id'])
-                    await thread.add_user(manager_member)
-                except:
-                    pass
-        except:
-            pass
+            print(f"✓ Added captain {captain.name} to thread")
+        except Exception as e:
+            print(f"✗ Failed to add captain to thread: {e}")
+        
+        # Add managers
+        for manager in managers:
+            try:
+                await asyncio.sleep(0.5)
+                manager_member = await interaction.guild.fetch_member(manager['discord_id'])
+                await thread.add_user(manager_member)
+                print(f"✓ Added manager {manager_member.name} to thread")
+            except Exception as e:
+                print(f"✗ Failed to add manager {manager['discord_id']}: {e}")
         
         # Send approval request
         approval_view = CoachApprovalView(team, self.user, captain, managers)
@@ -174,7 +189,7 @@ class CoachApprovalView(discord.ui.View):
             return True
         return any(m['discord_id'] == user_id for m in self.managers)
     
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✓")
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success)
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Approve coach request"""
         if not self.is_authorized(interaction.user.id):
@@ -218,7 +233,7 @@ class CoachApprovalView(discord.ui.View):
         # Log to bot-logs channel
         await self.log_registration(interaction.guild, interaction.user)
     
-    @discord.ui.button(label="Reject", style=discord.ButtonStyle.secondary, emoji="✗")
+    @discord.ui.button(label="Reject", style=discord.ButtonStyle.secondary)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Reject coach request"""
         if not self.is_authorized(interaction.user.id):
