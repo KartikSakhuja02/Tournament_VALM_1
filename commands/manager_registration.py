@@ -378,66 +378,8 @@ class ManagerRegistrationCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
     
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Send manager registration UI when bot starts"""
-        try:
-            channel = self.bot.get_channel(MANAGER_REGISTRATION_CHANNEL_ID)
-            if not channel:
-                print(f"✗ Manager registration channel not found: {MANAGER_REGISTRATION_CHANNEL_ID}")
-                return
-            
-            # Check if UI already exists (check last 10 messages)
-            async for message in channel.history(limit=10):
-                if message.author == self.bot.user and message.embeds:
-                    if "Manager Registration" in message.embeds[0].title:
-                        print(f"✓ Manager registration UI already exists in {channel.name}")
-                        return
-            
-            # Create embed
-            embed = discord.Embed(
-                title="🎮 VALORANT Mobile Tournament - Manager Registration",
-                description=(
-                    "**Welcome to Manager Registration!**\n\n"
-                    "Register as a **Manager** to help run an existing team.\n\n"
-                    "**Requirements:**\n"
-                    "✓ Must NOT be registered as a player\n"
-                    "✓ Must be approved by team captain or existing managers\n"
-                    "✓ Maximum 2 managers per team\n\n"
-                    "**Manager Responsibilities:**\n"
-                    "• Help captain manage team operations\n"
-                    "• Approve/reject new manager requests\n"
-                    "• Coordinate team schedules and practices\n\n"
-                    "Click **Register as Manager** below to begin!"
-                ),
-                color=discord.Color.blue()
-            )
-            
-            # Send message with button
-            await channel.send(
-                embed=embed,
-                view=ManagerRegistrationButtons()
-            )
-            
-            print(f"✓ Manager registration UI sent to {channel.name}")
-            
-        except Exception as e:
-            print(f"✗ Failed to send manager registration UI: {e}")
-    
-    @app_commands.command(name="setup_manager_registration")
-    @app_commands.describe(channel="The channel where the manager registration UI will be posted")
-    @has_test_role()
-    async def setup_manager_registration(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel = None
-    ):
-        """Setup the manager registration UI in a channel"""
-        await interaction.response.defer(ephemeral=True)
-        
-        target_channel = channel or interaction.channel
-        
-        # Create embed
+    def create_manager_registration_embed(self):
+        """Create the manager registration embed message"""
         embed = discord.Embed(
             title="🎮 VALORANT Mobile Tournament - Manager Registration",
             description=(
@@ -455,12 +397,44 @@ class ManagerRegistrationCog(commands.Cog):
             ),
             color=discord.Color.blue()
         )
+        return embed
+    
+    async def send_manager_registration_message(self, channel_id: int):
+        """Send the manager registration embed to the specified channel"""
+        try:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                print(f"❌ Channel with ID {channel_id} not found!")
+                return
+            
+            # Purge old bot messages from the channel
+            print(f"🧹 Purging old bot messages from {channel.name}...")
+            deleted = await channel.purge(limit=100, check=lambda m: m.author == self.bot.user)
+            print(f"✅ Deleted {len(deleted)} old bot message(s)")
+            
+            embed = self.create_manager_registration_embed()
+            view = ManagerRegistrationButtons()
+            
+            # Send the message with embed and buttons
+            await channel.send(embed=embed, view=view)
+            print(f"✅ Manager registration message sent to channel: {channel.name}")
+            
+        except Exception as e:
+            print(f"❌ Error sending manager registration message: {e}")
+    
+    @app_commands.command(name="setup_manager_registration")
+    @app_commands.describe(channel="The channel where the manager registration UI will be posted")
+    @has_test_role()
+    async def setup_manager_registration(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel = None
+    ):
+        """Setup the manager registration UI in a channel (optional - auto-sent on startup)"""
+        await interaction.response.defer(ephemeral=True)
         
-        # Send message with button
-        await target_channel.send(
-            embed=embed,
-            view=ManagerRegistrationButtons()
-        )
+        target_channel = channel or interaction.channel
+        await self.send_manager_registration_message(target_channel.id)
         
         await interaction.followup.send(
             f"✓ Manager registration UI posted in {target_channel.mention}",
