@@ -273,7 +273,6 @@ class ManagerRegistrationButtons(discord.ui.View):
     @discord.ui.button(
         label="Register as Manager",
         style=discord.ButtonStyle.primary,
-        emoji="👔",
         custom_id="register_manager_button"
     )
     async def register_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -414,9 +413,19 @@ class ManagerRegistrationCog(commands.Cog):
             embed = self.create_manager_registration_embed()
             view = ManagerRegistrationButtons()
             
-            # Send the message with embed and buttons
-            await channel.send(embed=embed, view=view)
-            print(f"✅ Manager registration message sent to channel: {channel.name}")
+            # Load and attach logo
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
+            
+            if os.path.exists(logo_path):
+                file = discord.File(logo_path, filename="LOGO.jpeg")
+                embed.set_thumbnail(url="attachment://LOGO.jpeg")
+                # Send the message with embed, logo, and buttons
+                await channel.send(file=file, embed=embed, view=view)
+                print(f"✅ Manager registration message sent to channel: {channel.name}")
+            else:
+                print(f"⚠️  Logo not found at {logo_path}, sending without logo")
+                await channel.send(embed=embed, view=view)
+                print(f"✅ Manager registration message sent to channel: {channel.name}")
             
         except Exception as e:
             print(f"❌ Error sending manager registration message: {e}")
