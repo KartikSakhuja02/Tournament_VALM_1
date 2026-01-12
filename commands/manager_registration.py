@@ -80,16 +80,25 @@ class TeamSelect(discord.ui.Select):
         selected_value = self.values[0]
         
         if selected_value == "no_teams":
-            # No teams available
+            # No teams available - delete thread after message
             await interaction.response.edit_message(
                 content="❌ **No Teams Available**\n\n"
                         "There are currently no teams registered with available manager slots.\n"
                         "To register your own team, you must:\n"
                         "• Be registered as a player\n"
                         "• Register as team captain\n"
-                        "• Create your team using the team registration command",
+                        "• Create your team using the team registration command\n\n"
+                        "This thread will be deleted in 10 seconds.",
                 view=None
             )
+            
+            # Wait 10 seconds then delete thread
+            import asyncio
+            await asyncio.sleep(10)
+            try:
+                await interaction.channel.delete()
+            except:
+                pass
             return
         
         # Get selected team
