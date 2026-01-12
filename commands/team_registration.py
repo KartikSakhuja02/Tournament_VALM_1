@@ -123,20 +123,52 @@ class TeamRegionSelect(discord.ui.Select):
         self.disabled = True
         await interaction.response.edit_message(view=self.view)
         
+        # Create skip button view
+        skip_view = discord.ui.View(timeout=300)
+        skip_button = discord.ui.Button(
+            label="Skip Logo Upload",
+            style=discord.ButtonStyle.secondary,
+            emoji="⏭️"
+        )
+        
+        async def skip_callback(skip_interaction: discord.Interaction):
+            if skip_interaction.user.id != self.user.id:
+                await skip_interaction.response.send_message(
+                    "❌ This button is not for you!",
+                    ephemeral=True
+                )
+                return
+            
+            # Disable button
+            skip_button.disabled = True
+            await skip_interaction.response.edit_message(view=skip_view)
+            
+            await skip_interaction.followup.send(
+                "✓ Logo upload skipped. Creating team without logo...",
+                ephemeral=False
+            )
+            
+            # Create team without logo
+            await self.create_team(interaction, region, logo_uploaded=False)
+        
+        skip_button.callback = skip_callback
+        skip_view.add_item(skip_button)
+        
         # Ask for team logo
         await interaction.followup.send(
             f"✓ Region selected: **{region}**\n\n"
-            f"**Final Step: Upload Team Logo**\n\n"
+            f"**Final Step: Upload Team Logo (Optional)**\n\n"
             f"Please upload your team logo as an image (PNG, JPG, JPEG).\n"
             f"The image will be saved as `{self.team_name}.png` on our server.\n\n"
-            f"**Upload your logo in this thread now.**",
+            f"**Upload your logo in this thread now, or click 'Skip Logo Upload' to continue without a logo.**",
+            view=skip_view,
             ephemeral=False
         )
         
         # Wait for image upload
-        await self.wait_for_logo_upload(interaction, region)
+        await self.wait_for_logo_upload(interaction, region, skip_view)
     
-    async def wait_for_logo_upload(self, interaction: discord.Interaction, region: str):
+    async def wait_for_logo_upload(self, interaction: discord.Interaction, region: str, skip_view: discord.ui.View):
         """Wait for user to upload team logo"""
         def check(message: discord.Message):
             return (
@@ -170,8 +202,12 @@ class TeamRegionSelect(discord.ui.Select):
                 )
                 return
             
+            # Disable skip button
+            for item in skip_view.children:
+                item.disabled = True
+            
             # Create team in database
-            await self.create_team(interaction, region)
+            await self.create_team(interaction, region, logo_uploaded=True)
             
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -205,7 +241,7 @@ class TeamRegionSelect(discord.ui.Select):
             print(f"❌ Error saving team logo: {e}")
             return False
     
-    async def create_team(self, interaction: discord.Interaction, region: str):
+    async def create_team(self, interaction: discord.Interaction, region: str, logo_uploaded: bool = False):
         """Create team in database"""
         try:
             # Check if user is registered as a player
@@ -234,12 +270,14 @@ class TeamRegionSelect(discord.ui.Select):
             )
             
             # Send success message
+            logo_status = "✓ Logo uploaded" if logo_uploaded else "⚠️ No logo uploaded"
             await interaction.followup.send(
                 f"🎉 **Team Created Successfully!**\n\n"
                 f"**Team Name:** {self.team_name}\n"
                 f"**Team Tag:** {self.team_tag}\n"
                 f"**Region:** {region}\n"
-                f"**Captain:** {self.user.mention}\n\n"
+                f"**Captain:** {self.user.mention}\n"
+                f"**Logo:** {logo_status}\n\n"
                 f"**Team Composition:**\n"
                 f"✓ 1/6 Players (You as captain)\n"
                 f"• 0/2 Managers\n"
@@ -249,7 +287,7 @@ class TeamRegionSelect(discord.ui.Select):
             )
             
             # Log to bot-logs channel
-            await self.log_team_creation(interaction.guild, team)
+            await self.log_team_creation(interaction.guild, team, logo_uploaded)
             
             # Close thread after 10 seconds
             await asyncio.sleep(10)
@@ -267,12 +305,14 @@ class TeamRegionSelect(discord.ui.Select):
                 ephemeral=True
             )
     
-    async def log_team_creation(self, guild: discord.Guild, team: dict):
+    async def log_team_creation(self, guild: discord.Guild, team: dict, logo_uploaded: bool = False):
         """Log team creation to bot-logs channel"""
         try:
             logs_channel = guild.get_channel(BOT_LOGS_CHANNEL_ID)
             if not logs_channel:
                 return
+            
+            logo_status = "Yes" if logo_uploaded else "No"
             
             # Create embed
             embed = discord.Embed(
@@ -281,7 +321,8 @@ class TeamRegionSelect(discord.ui.Select):
                     f"**Team Name:** {self.team_name}\n"
                     f"**Team Tag:** {self.team_tag}\n"
                     f"**Region:** {team['region']}\n"
-                    f"**Captain:** <@{self.user.id}>\n\n"
+                    f"**Captain:** <@{self.user.id}>\n"
+                    f"**Logo Uploaded:** {logo_status}\n\n"
                     f"**Team ID:** {team['id']}\n"
                     f"**Method:** Manual\n"
                     f"**Timestamp:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
