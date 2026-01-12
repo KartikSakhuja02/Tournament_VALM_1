@@ -285,6 +285,22 @@ class Database:
             )
             return [dict(row) for row in rows]
     
+    async def get_teams_with_coach_slots(self) -> List[Dict]:
+        """Get teams that have available coach slots (no coach yet)"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT t.*,
+                    COALESCE(COUNT(tm.id) FILTER (WHERE tm.role = 'coach'), 0) as coach_count
+                FROM teams t
+                LEFT JOIN team_members tm ON t.id = tm.team_id AND tm.role = 'coach'
+                GROUP BY t.id
+                HAVING COALESCE(COUNT(tm.id) FILTER (WHERE tm.role = 'coach'), 0) < 1
+                ORDER BY t.created_at DESC
+                """
+            )
+            return [dict(row) for row in rows]
+    
     # Team member operations
     
     async def add_team_member(
