@@ -217,6 +217,7 @@ class ConsentView(discord.ui.View):
                     roles_to_assign.append(int(apac_role_id))
             
             # Assign roles to the user
+            assigned_roles = []
             if roles_to_assign:
                 try:
                     member = interaction.guild.get_member(interaction.user.id)
@@ -225,6 +226,7 @@ class ConsentView(discord.ui.View):
                             role = interaction.guild.get_role(role_id)
                             if role:
                                 await member.add_roles(role)
+                                assigned_roles.append(role.name)
                                 print(f"✓ Assigned role: {role.name} to {self.ign}")
                             else:
                                 print(f"✗ Role with ID {role_id} not found")
@@ -234,6 +236,37 @@ class ConsentView(discord.ui.View):
                     print(f"✗ Error assigning roles: {e}")
             
             print(f"✅ Player registered: {self.ign} (Discord ID: {interaction.user.id})")
+            
+            # Send log to bot-logs channel
+            bot_logs_channel_id = os.getenv('BOT_LOGS_CHANNEL_ID')
+            if bot_logs_channel_id:
+                try:
+                    logs_channel = interaction.guild.get_channel(int(bot_logs_channel_id))
+                    if logs_channel:
+                        log_embed = discord.Embed(
+                            title="New Player Registration",
+                            color=0x00FF7F,
+                            timestamp=discord.utils.utcnow()
+                        )
+                        
+                        log_embed.add_field(name="Player", value=f"{interaction.user.mention} ({interaction.user.name})", inline=False)
+                        log_embed.add_field(name="IGN", value=f"```{self.ign}```", inline=True)
+                        log_embed.add_field(name="Player ID", value=f"```{self.player_id}```", inline=True)
+                        log_embed.add_field(name="Region", value=f"```{self.region}```", inline=True)
+                        
+                        if assigned_roles:
+                            log_embed.add_field(name="Roles Assigned", value=", ".join(assigned_roles), inline=False)
+                        
+                        log_embed.add_field(name="Discord ID", value=f"`{interaction.user.id}`", inline=True)
+                        log_embed.add_field(name="Account Created", value=f"<t:{int(interaction.user.created_at.timestamp())}:R>", inline=True)
+                        
+                        log_embed.set_thumbnail(url=interaction.user.display_avatar.url)
+                        log_embed.set_footer(text=f"Registration ID: {interaction.user.id}")
+                        
+                        await logs_channel.send(embed=log_embed)
+                        print(f"✓ Sent registration log to bot-logs channel")
+                except Exception as e:
+                    print(f"✗ Failed to send log to bot-logs channel: {e}")
             
         except Exception as e:
             print(f"❌ Database error during registration: {e}")
