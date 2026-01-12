@@ -381,19 +381,18 @@ class ManagerRegistrationCog(commands.Cog):
     def create_manager_registration_embed(self):
         """Create the manager registration embed message"""
         embed = discord.Embed(
-            title="🎮 VALORANT Mobile Tournament - Manager Registration",
+            title="Manager Registration",
             description=(
-                "**Welcome to Manager Registration!**\n\n"
-                "Register as a **Manager** to help run an existing team.\n\n"
+                "Want to become a manager for a team? Click the button below to get started.\n\n"
                 "**Requirements:**\n"
-                "✓ Must NOT be registered as a player\n"
-                "✓ Must be approved by team captain or existing managers\n"
-                "✓ Maximum 2 managers per team\n\n"
-                "**Manager Responsibilities:**\n"
-                "• Help captain manage team operations\n"
-                "• Approve/reject new manager requests\n"
-                "• Coordinate team schedules and practices\n\n"
-                "Click **Register as Manager** below to begin!"
+                "• The team must have less than 2 managers\n"
+                "• Team captain or existing manager must approve your request\n\n"
+                "**Process:**\n"
+                "1. Click the Register button\n"
+                "2. Select the team you want to manage\n"
+                "3. Wait for captain/manager approval\n"
+                "4. Get notified once approved\n\n"
+                "**Managers help organize and lead their teams!**"
             ),
             color=discord.Color.blue()
         )
