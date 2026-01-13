@@ -315,7 +315,7 @@ class Database:
                 """
                 SELECT tm.*, p.ign, p.player_id
                 FROM team_members tm
-                JOIN players p ON tm.discord_id = p.discord_id
+                LEFT JOIN players p ON tm.discord_id = p.discord_id
                 WHERE tm.team_id = $1
                 ORDER BY 
                     CASE tm.role
