@@ -410,26 +410,32 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
             if not channel:
                 return
             
+            # Check if logo file exists
+            if not logo_path.exists():
+                print(f"⚠️ Logo file not found: {logo_path}")
+                return
+            
             log_embed = discord.Embed(
-                title="New Team Registration",
+                title="New Team Registered (Thread)",
                 description=(
-                    f"**Team Name:** {team['team_name']}\n"
-                    f"**Team Tag:** {team['team_tag']}\n"
-                    f"**Region:** {team['region']}\n"
-                    f"**Captain:** {interaction.user.mention} ({interaction.user.name})\n"
-                    f"**Team ID:** {team['id']}\n"
-                    f"**Registered:** <t:{int(team['created_at'].timestamp())}:F>"
+                    f"**Team Name**\n{team['team_name']}\n\n"
+                    f"**Tag**\n[{team['team_tag']}]\n\n"
+                    f"**Region**\n{team['region']}\n\n"
+                    f"**Captain**\n{interaction.user.mention} ({interaction.user.name})\n\n"
+                    f"**Logo**\n[View Logo](attachment://{logo_path.name})\n\n"
+                    f"**Team ID:** {team['id']} | **Captain ID:** {interaction.user.id} • **Method:** Thread • "
+                    f"<t:{int(team['created_at'].timestamp())}:f>"
                 ),
-                color=discord.Color.blue(),
+                color=0x5865F2,  # Discord blurple
                 timestamp=team['created_at']
             )
             
             # Attach the local logo file
             logo_file = discord.File(logo_path, filename=logo_path.name)
             log_embed.set_thumbnail(url=f"attachment://{logo_path.name}")
-            log_embed.set_footer(text=f"Captain ID: {interaction.user.id}")
             
             await channel.send(embed=log_embed, file=logo_file)
+            print(f"✓ Team registration logged with logo: {logo_path.name}")
             
         except Exception as e:
             print(f"Error logging team registration: {e}")
