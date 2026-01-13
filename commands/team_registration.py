@@ -14,7 +14,7 @@ class TeamRoleSelectView(discord.ui.View):
         super().__init__(timeout=300)
         self.user_id = user_id
     
-    @discord.ui.button(label="I'm a Captain (Player)", style=discord.ButtonStyle.primary, emoji="⚔️")
+    @discord.ui.button(label="I'm a Captain (Player)", style=discord.ButtonStyle.primary)
     async def captain_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """User selects captain role"""
         if interaction.user.id != self.user_id:
@@ -25,7 +25,7 @@ class TeamRoleSelectView(discord.ui.View):
         modal = TeamNameModal(user_role='captain')
         await interaction.response.send_modal(modal)
     
-    @discord.ui.button(label="I'm a Manager", style=discord.ButtonStyle.secondary, emoji="📋")
+    @discord.ui.button(label="I'm a Manager", style=discord.ButtonStyle.secondary)
     async def manager_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """User selects manager role"""
         if interaction.user.id != self.user_id:
