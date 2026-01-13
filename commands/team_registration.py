@@ -100,4 +100,10 @@ class TeamRegistrationCog(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(TeamRegistrationCog(bot))
+    """Setup function for cog - registers persistent views"""
+    cog = TeamRegistrationCog(bot)
+    await bot.add_cog(cog)
+    
+    # Register persistent view so buttons work after bot restart
+    bot.add_view(TeamRegistrationButtons())
+    print("✓ Team registration persistent view registered")

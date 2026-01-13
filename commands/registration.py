@@ -129,8 +129,6 @@ class RegionSelect(discord.ui.Select):
         )
         
         await interaction.followup.send(embed=embed, view=consent_view)
-        
-        await interaction.followup.send(embed=embed, view=consent_view)
 
 
 class ConsentView(discord.ui.View):
@@ -677,4 +675,10 @@ class RegistrationCog(commands.Cog):
             print(f"❌ Error sending registration message: {e}")
 
 async def setup(bot):
-    await bot.add_cog(RegistrationCog(bot))
+    """Setup function for cog - registers persistent views"""
+    cog = RegistrationCog(bot)
+    await bot.add_cog(cog)
+    
+    # Register persistent view so buttons work after bot restart
+    bot.add_view(RegistrationButtons(cog))
+    print("✓ Registration persistent view registered")

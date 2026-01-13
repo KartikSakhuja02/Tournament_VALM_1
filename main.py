@@ -34,28 +34,36 @@ async def load_commands():
             print(f"✗ Failed to load {command}: {e}")
 
 @bot.event
-async def on_ready():
-    """Event triggered when bot successfully connects to Discord"""
-    print(f"Bot is online")
-    print(f"Logged in as: {bot.user.name} ({bot.user.id})")
-    print("=" * 50)
+async def setup_hook():
+    """Setup hook - runs before bot connects to Discord"""
+    print("⚙️  Starting bot setup...")
     
-    # Connect to database
+    # Connect to database first
     try:
         await db.connect()
+        print("✓ Database connected")
     except Exception as e:
-        print(f"Failed to connect to database: {e}")
+        print(f"✗ Database connection failed: {e}")
         print("Bot will continue without database functionality")
     
-    # Load commands
+    # Load command extensions
     await load_commands()
     
     # Sync slash commands
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        print(f"✓ Synced {len(synced)} command(s)")
     except Exception as e:
-        print(f"Failed to sync commands: {e}")
+        print(f"✗ Failed to sync commands: {e}")
+    
+    print("✅ Bot setup complete!")
+
+@bot.event
+async def on_ready():
+    """Event triggered when bot successfully connects to Discord"""
+    print(f"🟢 Bot is online")
+    print(f"Logged in as: {bot.user.name} ({bot.user.id})")
+    print("=" * 50)
     
     # Send registration message on startup (if channel ID is configured)
     registration_channel_id = os.getenv("REGISTRATION_CHANNEL_ID")
