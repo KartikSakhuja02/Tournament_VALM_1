@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 import os
 import asyncio
+import aiohttp
+from pathlib import Path
 from database.db import db
 
 
@@ -311,7 +313,36 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 )
                 return
             
+            # Download and save logo locally
+            logo_dir = Path(__file__).parent.parent / "team_logos"
+            logo_dir.mkdir(exist_ok=True)
+            
+            # Sanitize team name for filename (remove special characters)
+            safe_team_name = "".join(c for c in self.team_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_team_name = safe_team_name.replace(' ', '_')
+            logo_filename = f"{safe_team_name}.png"
+            logo_path = logo_dir / logo_filename
+            
+            # Download the image
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as resp:
+                        if resp.status == 200:
+                            with open(logo_path, 'wb') as f:
+                                f.write(await resp.read())
+                            print(f"✓ Downloaded team logo: {logo_path}")
+                        else:
+                            raise Exception(f"Failed to download image: HTTP {resp.status}")
+            except Exception as e:
+                print(f"Error downloading logo: {e}")
+                await interaction.followup.send(
+                    f"❌ Failed to download logo: {e}\nPlease try again.",
+                    ephemeral=False
+                )
+                return
+            
             logo_url = attachment.url
+            local_logo_path = str(logo_path)
             
             # Create team in database
             team = await db.create_team(
@@ -319,7 +350,7 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 team_tag=self.team_tag,
                 region=self.region,
                 captain_discord_id=interaction.user.id,
-                logo_url=logo_url
+                logo_url=local_logo_path  # Store local path instead of Discord URL
             )
             
             # Add captain as team member
@@ -329,7 +360,7 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 role='captain'
             )
             
-            # Success message
+            # Success message with local logo file
             success_embed = discord.Embed(
                 title="✅ Team Registered Successfully!",
                 description=(
@@ -342,15 +373,18 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 ),
                 color=discord.Color.green()
             )
-            success_embed.set_thumbnail(url=logo_url)
             
-            await interaction.followup.send(embed=success_embed, ephemeral=False)
+            # Attach the downloaded logo file
+            logo_file = discord.File(logo_path, filename=logo_filename)
+            success_embed.set_thumbnail(url=f"attachment://{logo_filename}")
+            
+            await interaction.followup.send(embed=success_embed, file=logo_file, ephemeral=False)
             
             # Log to bot logs channel
             await self.log_team_registration(
                 interaction=interaction,
                 team=team,
-                logo_url=logo_url
+                logo_path=logo_path
             )
             
             # Close thread after 5 seconds
@@ -365,7 +399,7 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 ephemeral=False
             )
     
-    async def log_team_registration(self, interaction: discord.Interaction, team: dict, logo_url: str):
+    async def log_team_registration(self, interaction: discord.Interaction, team: dict, logo_path: Path):
         """Log team registration to bot logs channel"""
         bot_logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
         if not bot_logs_channel_id:
@@ -389,10 +423,13 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 color=discord.Color.blue(),
                 timestamp=team['created_at']
             )
-            log_embed.set_thumbnail(url=logo_url)
+            
+            # Attach the local logo file
+            logo_file = discord.File(logo_path, filename=logo_path.name)
+            log_embed.set_thumbnail(url=f"attachment://{logo_path.name}")
             log_embed.set_footer(text=f"Captain ID: {interaction.user.id}")
             
-            await channel.send(embed=log_embed)
+            await channel.send(embed=log_embed, file=logo_file)
             
         except Exception as e:
             print(f"Error logging team registration: {e}")

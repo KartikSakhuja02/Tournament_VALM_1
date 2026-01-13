@@ -4,6 +4,9 @@
 # Service files (environment-specific)
 tournament-manager.service
 
+# Team logos (user uploaded content)
+team_logos/
+
 # Python
 __pycache__/
 *.py[cod]
