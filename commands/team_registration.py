@@ -167,8 +167,12 @@ class TeamRegionSelect(discord.ui.Select):
         
         player_region = player['region']
         
-        # Check if regions match
-        if player_region != selected_region:
+        # Check if regions match (India and AP are considered the same)
+        regions_match = (player_region == selected_region) or \
+                       (player_region == 'India' and selected_region == 'AP') or \
+                       (player_region == 'AP' and selected_region == 'India')
+        
+        if not regions_match:
             # Show region mismatch confirmation
             mismatch_view = RegionMismatchView(
                 user_id=self.user_id,
@@ -282,6 +286,11 @@ class RegionMismatchView(discord.ui.View):
             "Team registration cancelled. You can start over by clicking the **Register Your Team** button again.",
             ephemeral=False
         )
+        
+        # Delete thread after 3 seconds
+        await asyncio.sleep(3)
+        if isinstance(interaction.channel, discord.Thread):
+            await interaction.channel.delete()
 
 
 class TeamLogoUploadView(discord.ui.View):
