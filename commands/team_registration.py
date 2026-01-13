@@ -7,6 +7,36 @@ from pathlib import Path
 from database.db import db
 
 
+class TeamRoleSelectView(discord.ui.View):
+    """View to select role (Manager or Captain)"""
+    
+    def __init__(self, user_id: int):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+    
+    @discord.ui.button(label="I'm a Captain (Player)", style=discord.ButtonStyle.primary, emoji="⚔️")
+    async def captain_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """User selects captain role"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your team registration.", ephemeral=True)
+            return
+        
+        # Show team name modal with captain role
+        modal = TeamNameModal(user_role='captain')
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="I'm a Manager", style=discord.ButtonStyle.secondary, emoji="📋")
+    async def manager_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """User selects manager role"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your team registration.", ephemeral=True)
+            return
+        
+        # Show team name modal with manager role
+        modal = TeamNameModal(user_role='manager')
+        await interaction.response.send_modal(modal)
+
+
 class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
     """Modal for team name and tag input"""
     
@@ -26,6 +56,10 @@ class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
         max_length=5,
         style=discord.TextStyle.short
     )
+    
+    def __init__(self, user_role: str):
+        super().__init__()
+        self.user_role = user_role  # 'captain' or 'manager'
     
     async def on_submit(self, interaction: discord.Interaction):
         """Handle form submission - show region selector"""
@@ -53,7 +87,8 @@ class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
         region_view = TeamRegionSelectView(
             user_id=interaction.user.id,
             team_name=self.team_name.value,
-            team_tag=self.team_tag.value
+            team_tag=self.team_tag.value,
+            user_role=self.user_role
         )
         
         embed = discord.Embed(
@@ -72,23 +107,25 @@ class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
 class TeamRegionSelectView(discord.ui.View):
     """View with team region dropdown"""
     
-    def __init__(self, user_id: int, team_name: str, team_tag: str):
+    def __init__(self, user_id: int, team_name: str, team_tag: str, user_role: str):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.team_name = team_name
         self.team_tag = team_tag
+        self.user_role = user_role
         
         # Add region select menu
-        self.add_item(TeamRegionSelect(user_id, team_name, team_tag))
+        self.add_item(TeamRegionSelect(user_id, team_name, team_tag, user_role))
 
 
 class TeamRegionSelect(discord.ui.Select):
     """Dropdown for team region selection"""
     
-    def __init__(self, user_id: int, team_name: str, team_tag: str):
+    def __init__(self, user_id: int, team_name: str, team_tag: str, user_role: str):
         self.user_id = user_id
         self.team_name = team_name
         self.team_tag = team_tag
+        self.user_role = user_role
         
         options = [
             discord.SelectOption(label="North America (NA)", value="NA"),
@@ -138,7 +175,8 @@ class TeamRegionSelect(discord.ui.Select):
                 team_name=self.team_name,
                 team_tag=self.team_tag,
                 team_region=selected_region,
-                player_region=player_region
+                player_region=player_region,
+                user_role=self.user_role
             )
             
             embed = discord.Embed(
@@ -164,7 +202,8 @@ class TeamRegionSelect(discord.ui.Select):
             user_id=self.user_id,
             team_name=self.team_name,
             team_tag=self.team_tag,
-            region=region
+            region=region,
+            user_role=self.user_role
         )
         
         embed = discord.Embed(
@@ -188,13 +227,14 @@ class TeamRegionSelect(discord.ui.Select):
 class RegionMismatchView(discord.ui.View):
     """View with accept/decline buttons for region mismatch"""
     
-    def __init__(self, user_id: int, team_name: str, team_tag: str, team_region: str, player_region: str):
+    def __init__(self, user_id: int, team_name: str, team_tag: str, team_region: str, player_region: str, user_role: str):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.team_name = team_name
         self.team_tag = team_tag
         self.team_region = team_region
         self.player_region = player_region
+        self.user_role = user_role
     
     @discord.ui.button(label="Accept", style=discord.ButtonStyle.success)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -210,7 +250,8 @@ class RegionMismatchView(discord.ui.View):
             user_id=self.user_id,
             team_name=self.team_name,
             team_tag=self.team_tag,
-            region=self.team_region
+            region=self.team_region,
+            user_role=self.user_role
         )
         
         embed = discord.Embed(
@@ -246,12 +287,13 @@ class RegionMismatchView(discord.ui.View):
 class TeamLogoUploadView(discord.ui.View):
     """View for team logo upload"""
     
-    def __init__(self, user_id: int, team_name: str, team_tag: str, region: str):
+    def __init__(self, user_id: int, team_name: str, team_tag: str, region: str, user_role: str):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.team_name = team_name
         self.team_tag = team_tag
         self.region = region
+        self.user_role = user_role
     
     @discord.ui.button(label="Upload Logo", style=discord.ButtonStyle.primary)
     async def upload_logo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -264,7 +306,8 @@ class TeamLogoUploadView(discord.ui.View):
         modal = TeamLogoModal(
             team_name=self.team_name,
             team_tag=self.team_tag,
-            region=self.region
+            region=self.region,
+            user_role=self.user_role
         )
         await interaction.response.send_modal(modal)
 
@@ -280,11 +323,12 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
         default="I will upload the logo in the next message"
     )
     
-    def __init__(self, team_name: str, team_tag: str, region: str):
+    def __init__(self, team_name: str, team_tag: str, region: str, user_role: str):
         super().__init__()
         self.team_name = team_name
         self.team_tag = team_tag
         self.region = region
+        self.user_role = user_role  # 'captain' or 'manager'
     
     async def on_submit(self, interaction: discord.Interaction):
         """Wait for logo upload"""
@@ -353,12 +397,15 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 logo_url=local_logo_path  # Store local path instead of Discord URL
             )
             
-            # Add captain as team member
+            # Add user as team member with their selected role
             await db.add_team_member(
                 team_id=team['id'],
                 discord_id=interaction.user.id,
-                role='captain'
+                role=self.user_role  # 'captain' or 'manager'
             )
+            
+            # Determine role display text
+            role_text = "team captain" if self.user_role == "captain" else "team manager"
             
             # Success message with local logo file
             success_embed = discord.Embed(
@@ -367,8 +414,8 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                     f"**Team Name:** `{self.team_name}`\n"
                     f"**Team Tag:** `{self.team_tag}`\n"
                     f"**Region:** `{self.region}`\n"
-                    f"**Captain:** {interaction.user.mention}\n\n"
-                    "Your team has been created! You are now the team captain.\n"
+                    f"**Your Role:** {role_text.title()}\n\n"
+                    f"Your team has been created! You are now the {role_text}.\n"
                     "You can add players, managers, and coaches to your team."
                 ),
                 color=discord.Color.green()
@@ -535,37 +582,14 @@ class TeamRegistrationButtons(discord.ui.View):
                     f"Hello {interaction.user.mention}!\n\n"
                     "Let's create your VALORANT Mobile team. "
                     "I'll guide you through the process.\n\n"
-                    "**Steps:**\n"
-                    "1️⃣ Team Name & Tag\n"
-                    "2️⃣ Select Region\n"
-                    "3️⃣ Upload Team Logo\n\n"
-                    "Click the button below to start!"
+                    "**First, select your role in the team:**"
                 ),
                 color=discord.Color.blue()
             )
             
-            start_view = discord.ui.View()
-            start_button = discord.ui.Button(
-                label="Start Registration",
-                style=discord.ButtonStyle.primary
-            )
+            role_view = TeamRoleSelectView(interaction.user.id)
             
-            async def start_callback(button_interaction: discord.Interaction):
-                if button_interaction.user.id != interaction.user.id:
-                    await button_interaction.response.send_message(
-                        "This is not your team registration.",
-                        ephemeral=True
-                    )
-                    return
-                
-                # Show team name modal
-                modal = TeamNameModal()
-                await button_interaction.response.send_modal(modal)
-            
-            start_button.callback = start_callback
-            start_view.add_item(start_button)
-            
-            await thread.send(embed=welcome_embed, view=start_view)
+            await thread.send(embed=welcome_embed, view=role_view)
             
         except Exception as e:
             print(f"Error creating team registration thread: {e}")
