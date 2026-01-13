@@ -328,6 +328,255 @@ class ConsentView(discord.ui.View):
             await interaction.channel.delete()
 
 
+class PlayerSearchView(discord.ui.View):
+    """View with user search functionality"""
+    
+    def __init__(self, requester_id: int, all_teams: list):
+        super().__init__(timeout=300)
+        self.requester_id = requester_id
+        self.all_teams = all_teams
+    
+    @discord.ui.button(label="Search Player", style=discord.ButtonStyle.primary)
+    async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Show search modal"""
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message("This is not your request.", ephemeral=True)
+            return
+        
+        modal = PlayerSearchModal(requester_id=self.requester_id, all_teams=self.all_teams)
+        await interaction.response.send_modal(modal)
+
+
+class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
+    """Modal to search for a player by username"""
+    
+    player_search = discord.ui.TextInput(
+        label="Player Username or ID",
+        placeholder="Enter the player's Discord username or ID",
+        required=True,
+        max_length=100,
+        style=discord.TextStyle.short
+    )
+    
+    def __init__(self, requester_id: int, all_teams: list):
+        super().__init__()
+        self.requester_id = requester_id
+        self.all_teams = all_teams
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Search for the player and create registration thread"""
+        await interaction.response.defer(ephemeral=True)
+        
+        search_query = self.player_search.value.strip()
+        guild = interaction.guild
+        
+        # Try to find the user
+        target_user = None
+        
+        # First try to get by ID if it's a number
+        if search_query.isdigit():
+            try:
+                target_user = await guild.fetch_member(int(search_query))
+            except:
+                pass
+        
+        # If not found, search by username (case-insensitive)
+        if not target_user:
+            search_lower = search_query.lower()
+            for member in guild.members:
+                if (member.name.lower() == search_lower or 
+                    member.display_name.lower() == search_lower or
+                    str(member).lower() == search_lower):
+                    target_user = member
+                    break
+        
+        # If still not found, try partial match
+        if not target_user:
+            search_lower = search_query.lower()
+            matches = []
+            for member in guild.members:
+                if (search_lower in member.name.lower() or 
+                    search_lower in member.display_name.lower()):
+                    matches.append(member)
+            
+            if len(matches) == 1:
+                target_user = matches[0]
+            elif len(matches) > 1:
+                # Multiple matches, show selection
+                await interaction.followup.send(
+                    f"❌ Multiple users found matching '{search_query}'. Please be more specific:\n" +
+                    "\n".join([f"• {m.mention} ({m.name})" for m in matches[:10]]),
+                    ephemeral=True
+                )
+                return
+        
+        if not target_user:
+            await interaction.followup.send(
+                f"❌ Could not find user: `{search_query}`\n"
+                "Please check the username/ID and try again.",
+                ephemeral=True
+            )
+            return
+        
+        # Check if target user is already registered
+        existing_player = await db.get_player_by_discord_id(target_user.id)
+        if existing_player:
+            await interaction.followup.send(
+                f"❌ {target_user.mention} is already registered!\n"
+                f"**IGN:** `{existing_player['ign']}`\n"
+                f"**Region:** `{existing_player['region']}`",
+                ephemeral=True
+            )
+            return
+        
+        # Create private thread
+        try:
+            thread = await interaction.channel.create_thread(
+                name=f"Player Registration - {target_user.name} (by {interaction.user.name})",
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60
+            )
+            
+            # Add target user and requester to thread
+            await thread.add_user(target_user)
+            await thread.add_user(interaction.user)
+            
+            # Add administrators
+            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+            if administrator_role_id:
+                try:
+                    admin_role = interaction.guild.get_role(int(administrator_role_id))
+                    if admin_role:
+                        for member in admin_role.members:
+                            try:
+                                await thread.add_user(member)
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                except Exception as e:
+                    print(f"Error processing administrators: {e}")
+            
+            # Add head mods
+            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
+            if headmod_role_id:
+                try:
+                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
+                    if headmod_role:
+                        for member in headmod_role.members:
+                            try:
+                                await thread.add_user(member)
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                except Exception as e:
+                    print(f"Error processing head mods: {e}")
+            
+            # Send welcome message in thread
+            team_names = ", ".join([f"**{team['team_name']}**" for team in self.all_teams])
+            
+            welcome_embed = discord.Embed(
+                title="Player Registration (Manager/Captain Assisted)",
+                description=(
+                    f"Hey {target_user.mention}!\n\n"
+                    f"{interaction.user.mention} (Manager/Captain of {team_names}) is helping you register for the tournament.\n\n"
+                    "Either you or the manager/captain can fill out the registration form by clicking the button below."
+                ),
+                color=discord.Color.green()
+            )
+            welcome_embed.set_footer(text="Click 'Fill Form' to continue")
+            
+            # Create view with form button (anyone can fill)
+            form_view = AssistedRegistrationView(target_user_id=target_user.id, requester_id=interaction.user.id)
+            
+            await thread.send(embed=welcome_embed, view=form_view)
+            
+            # Respond to original interaction
+            await interaction.followup.send(
+                f"✅ Registration thread created for {target_user.mention}: {thread.mention}",
+                ephemeral=True
+            )
+            
+        except Exception as e:
+            print(f"Error creating registration thread: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            await interaction.followup.send(
+                "❌ An error occurred creating the thread. Please try again later.",
+                ephemeral=True
+            )
+
+
+class AssistedRegistrationView(discord.ui.View):
+    """View for assisted registration - both player and manager can fill form"""
+    
+    def __init__(self, target_user_id: int, requester_id: int):
+        super().__init__(timeout=300)
+        self.target_user_id = target_user_id
+        self.requester_id = requester_id
+    
+    @discord.ui.button(label="Fill Form", style=discord.ButtonStyle.primary)
+    async def fill_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Allow either the target user or requester to fill the form"""
+        if interaction.user.id not in [self.target_user_id, self.requester_id]:
+            await interaction.response.send_message(
+                "Only the player being registered or the manager/captain can fill this form.",
+                ephemeral=True
+            )
+            return
+        
+        # Show modal with target user's ID
+        modal = AssistedRegistrationModal(target_user_id=self.target_user_id)
+        await interaction.response.send_modal(modal)
+
+
+class AssistedRegistrationModal(discord.ui.Modal, title="Player Registration"):
+    """Modal form for assisted player registration"""
+    
+    ign = discord.ui.TextInput(
+        label="In-Game Name (IGN)",
+        placeholder="Enter player's VALORANT Mobile IGN",
+        required=True,
+        max_length=50,
+        style=discord.TextStyle.short
+    )
+    
+    player_id = discord.ui.TextInput(
+        label="Player ID",
+        placeholder="Enter player's Player ID (numbers only)",
+        required=True,
+        max_length=20,
+        style=discord.TextStyle.short
+    )
+    
+    def __init__(self, target_user_id: int):
+        super().__init__()
+        self.target_user_id = target_user_id
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle form submission - show region selector"""
+        await interaction.response.defer()
+        
+        # Create region selection view for the target user
+        region_view = RegionSelectView(
+            user_id=self.target_user_id,
+            ign=self.ign.value,
+            player_id=self.player_id.value
+        )
+        
+        embed = discord.Embed(
+            title="Select Player's Region",
+            description=(
+                f"**IGN:** `{self.ign.value}`\n"
+                f"**Player ID:** `{self.player_id.value}`\n\n"
+                "Please select the player's region from the dropdown menu below."
+            ),
+            color=0xFF4654
+        )
+        
+        await interaction.followup.send(embed=embed, view=region_view)
+
+
 class RegistrationButtons(discord.ui.View):
     """Persistent view with registration buttons"""
     
@@ -480,6 +729,37 @@ class RegistrationButtons(discord.ui.View):
             except:
                 # If followup also fails, the interaction already expired
                 pass
+    
+    @discord.ui.button(
+        label="Register Your Player",
+        style=discord.ButtonStyle.success,
+        custom_id="register_player_as_manager"
+    )
+    async def register_player_as_manager(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle manager/captain registering a player"""
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check if user is a manager or captain of any team
+        manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
+        captain_teams = await db.get_user_teams_by_role(interaction.user.id, 'captain')
+        
+        all_teams = manager_teams + captain_teams
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ Only team managers and captains can use this feature.\n"
+                "You must be a manager or captain of a team to register players.",
+                ephemeral=True
+            )
+            return
+        
+        # Show user search modal
+        modal = PlayerSearchModal(requester_id=interaction.user.id, all_teams=all_teams)
+        await interaction.followup.send(
+            "Please search for the player you want to register:",
+            view=PlayerSearchView(requester_id=interaction.user.id, all_teams=all_teams),
+            ephemeral=True
+        )
     
     @discord.ui.button(
         label="Check Notification Status",
