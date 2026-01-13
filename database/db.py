@@ -230,6 +230,123 @@ class Database:
             else:
                 count = await conn.fetchval("SELECT COUNT(*) FROM players")
             return count
+    
+    # Team operations
+    
+    async def get_team_by_name(self, team_name: str) -> Optional[Dict]:
+        """Get team by name (case insensitive)"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM teams WHERE LOWER(team_name) = LOWER($1)",
+                team_name
+            )
+            return dict(row) if row else None
+    
+    async def get_team_by_tag(self, team_tag: str) -> Optional[Dict]:
+        """Get team by tag (case insensitive)"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM teams WHERE LOWER(team_tag) = LOWER($1)",
+                team_tag
+            )
+            return dict(row) if row else None
+    
+    async def get_team_by_captain(self, captain_discord_id: int) -> Optional[Dict]:
+        """Get team by captain Discord ID"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM teams WHERE captain_discord_id = $1",
+                captain_discord_id
+            )
+            return dict(row) if row else None
+    
+    async def create_team(
+        self,
+        team_name: str,
+        team_tag: str,
+        region: str,
+        captain_discord_id: int,
+        logo_url: Optional[str] = None
+    ) -> Dict:
+        """Create a new team"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO teams (team_name, team_tag, region, captain_discord_id, logo_url)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING *
+                """,
+                team_name, team_tag, region, captain_discord_id, logo_url
+            )
+            return dict(row)
+    
+    async def update_team(self, team_id: int, **kwargs) -> Optional[Dict]:
+        """Update team information"""
+        if not kwargs:
+            return None
+        
+        set_clause = ", ".join([f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())])
+        values = [team_id] + list(kwargs.values())
+        
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"""
+                UPDATE teams
+                SET {set_clause}
+                WHERE id = $1
+                RETURNING *
+                """,
+                *values
+            )
+            return dict(row) if row else None
+    
+    async def get_team_members(self, team_id: int) -> List[Dict]:
+        """Get all members of a team"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT tm.*, p.ign, p.player_id
+                FROM team_members tm
+                JOIN players p ON tm.discord_id = p.discord_id
+                WHERE tm.team_id = $1
+                ORDER BY 
+                    CASE tm.role
+                        WHEN 'captain' THEN 1
+                        WHEN 'player' THEN 2
+                        WHEN 'manager' THEN 3
+                        WHEN 'coach' THEN 4
+                    END
+                """,
+                team_id
+            )
+            return [dict(row) for row in rows]
+    
+    async def add_team_member(
+        self,
+        team_id: int,
+        discord_id: int,
+        role: str = 'player'
+    ) -> Dict:
+        """Add a member to a team"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO team_members (team_id, discord_id, role)
+                VALUES ($1, $2, $3)
+                RETURNING *
+                """,
+                team_id, discord_id, role
+            )
+            return dict(row)
+    
+    async def remove_team_member(self, team_id: int, discord_id: int) -> bool:
+        """Remove a member from a team"""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM team_members WHERE team_id = $1 AND discord_id = $2",
+                team_id, discord_id
+            )
+            return result == "DELETE 1"
 
 
 # Global database instance
