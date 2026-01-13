@@ -1,0 +1,409 @@
+import discord
+from discord.ext import commands
+import os
+import asyncio
+from database.db import db
+
+
+class ManagerRegistrationButtons(discord.ui.View):
+    """Persistent view with manager registration button"""
+    
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(
+        label="Register as Manager",
+        style=discord.ButtonStyle.primary,
+        custom_id="register_manager"
+    )
+    async def register_manager(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle manager registration button click"""
+        # Respond immediately to prevent timeout
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check if player is registered
+        player = await db.get_player_by_discord_id(interaction.user.id)
+        if not player:
+            await interaction.followup.send(
+                "❌ You must be registered as a player before becoming a manager.\n"
+                "Please use the player registration first.",
+                ephemeral=True
+            )
+            return
+        
+        # Create private thread
+        try:
+            thread = await interaction.channel.create_thread(
+                name=f"Manager Registration - {interaction.user.name}",
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60
+            )
+            
+            # Add user to thread
+            await thread.add_user(interaction.user)
+            
+            # Add administrators
+            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+            if administrator_role_id:
+                try:
+                    admin_role = interaction.guild.get_role(int(administrator_role_id))
+                    if admin_role:
+                        for member in admin_role.members:
+                            try:
+                                await thread.add_user(member)
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                except Exception as e:
+                    print(f"Error processing administrators: {e}")
+            
+            # Add head mods
+            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
+            if headmod_role_id:
+                try:
+                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
+                    if headmod_role:
+                        for member in headmod_role.members:
+                            try:
+                                await thread.add_user(member)
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                except Exception as e:
+                    print(f"Error processing head mods: {e}")
+            
+            # Send confirmation
+            await interaction.followup.send(
+                f"✅ Private thread created: {thread.mention}",
+                ephemeral=True
+            )
+            
+            # Get teams with available manager slots
+            teams = await db.get_all_teams()
+            teams_with_slots = []
+            
+            for team in teams:
+                members = await db.get_team_members(team['id'])
+                manager_count = sum(1 for m in members if m['role'] == 'manager')
+                if manager_count < 2:  # Max 2 managers per team
+                    available_slots = 2 - manager_count
+                    teams_with_slots.append({
+                        'team': team,
+                        'available_slots': available_slots
+                    })
+            
+            # Send team selection UI
+            welcome_embed = discord.Embed(
+                title="Select Team to Manage",
+                description=(
+                    f"Hello {interaction.user.mention}!\n\n"
+                    "Please select which team you want to manage from the dropdown below.\n\n"
+                    "**Note:** The team captain will need to approve your request."
+                ),
+                color=discord.Color.blue()
+            )
+            
+            team_select_view = TeamSelectView(
+                user_id=interaction.user.id,
+                teams_with_slots=teams_with_slots
+            )
+            
+            await thread.send(embed=welcome_embed, view=team_select_view)
+            
+        except Exception as e:
+            print(f"Error creating manager registration thread: {e}")
+            await interaction.followup.send(
+                f"❌ Failed to create registration thread: {e}",
+                ephemeral=True
+            )
+
+
+class TeamSelectView(discord.ui.View):
+    """View with team dropdown"""
+    
+    def __init__(self, user_id: int, teams_with_slots: list):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.teams_with_slots = teams_with_slots
+        
+        # Add team select dropdown
+        self.add_item(TeamSelect(user_id, teams_with_slots))
+
+
+class TeamSelect(discord.ui.Select):
+    """Dropdown for team selection"""
+    
+    def __init__(self, user_id: int, teams_with_slots: list):
+        self.user_id = user_id
+        self.teams_with_slots = teams_with_slots
+        
+        options = []
+        
+        if not teams_with_slots:
+            # No teams available
+            options.append(
+                discord.SelectOption(
+                    label="No Teams Found",
+                    value="no_teams",
+                    description="Click here if no teams are available"
+                )
+            )
+        else:
+            # Add teams with available slots
+            for item in teams_with_slots:
+                team = item['team']
+                slots = item['available_slots']
+                options.append(
+                    discord.SelectOption(
+                        label=f"{team['team_name']} [{team['team_tag']}]",
+                        value=str(team['id']),
+                        description=f"{slots} manager slot{'s' if slots > 1 else ''} available"
+                    )
+                )
+        
+        super().__init__(
+            placeholder="Choose a team to manage...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle team selection"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your registration.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        selected_value = self.values[0]
+        
+        # Check if "No Teams Found" was selected
+        if selected_value == "no_teams":
+            await interaction.followup.send(
+                "❌ No teams are currently available for management.\n"
+                "Please register your team first from the team registration channel.",
+                ephemeral=False
+            )
+            
+            # Delete thread after 3 seconds
+            await asyncio.sleep(3)
+            if isinstance(interaction.channel, discord.Thread):
+                await interaction.channel.delete()
+            return
+        
+        # Get selected team
+        team_id = int(selected_value)
+        selected_team = None
+        for item in self.teams_with_slots:
+            if item['team']['id'] == team_id:
+                selected_team = item['team']
+                break
+        
+        if not selected_team:
+            await interaction.followup.send(
+                "❌ Team not found. Please try again.",
+                ephemeral=False
+            )
+            return
+        
+        # Get captain
+        captain_id = selected_team['captain_discord_id']
+        captain = interaction.guild.get_member(captain_id)
+        
+        if not captain:
+            await interaction.followup.send(
+                "❌ Team captain not found in this server.",
+                ephemeral=False
+            )
+            return
+        
+        # Add captain to thread
+        try:
+            await interaction.channel.add_user(captain)
+            print(f"✓ Added captain {captain.name} to manager registration thread")
+        except Exception as e:
+            print(f"Error adding captain to thread: {e}")
+        
+        # Send approval request
+        approval_embed = discord.Embed(
+            title="Manager Approval Request",
+            description=(
+                f"{captain.mention}, {interaction.user.mention} wants to become a manager for your team!\n\n"
+                f"**Team:** {selected_team['team_name']} [{selected_team['team_tag']}]\n"
+                f"**Applicant:** {interaction.user.mention} ({interaction.user.name})\n\n"
+                "Do you approve this manager request?"
+            ),
+            color=discord.Color.orange()
+        )
+        
+        approval_view = ManagerApprovalView(
+            captain_id=captain_id,
+            applicant_id=interaction.user.id,
+            team_id=team_id,
+            team_name=selected_team['team_name']
+        )
+        
+        await interaction.followup.send(embed=approval_embed, view=approval_view)
+
+
+class ManagerApprovalView(discord.ui.View):
+    """View with accept/decline buttons for captain"""
+    
+    def __init__(self, captain_id: int, applicant_id: int, team_id: int, team_name: str):
+        super().__init__(timeout=300)
+        self.captain_id = captain_id
+        self.applicant_id = applicant_id
+        self.team_id = team_id
+        self.team_name = team_name
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success)
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Accept manager request"""
+        if interaction.user.id != self.captain_id:
+            await interaction.response.send_message(
+                "❌ Only the team captain can approve this request.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer()
+        
+        try:
+            # Add user as manager to team
+            await db.add_team_member(
+                team_id=self.team_id,
+                discord_id=self.applicant_id,
+                role='manager'
+            )
+            
+            # Success message
+            applicant = interaction.guild.get_member(self.applicant_id)
+            success_embed = discord.Embed(
+                title="✅ Manager Approved!",
+                description=(
+                    f"{applicant.mention} has been added as a manager for **{self.team_name}**!\n\n"
+                    "The manager can now help organize and lead the team."
+                ),
+                color=discord.Color.green()
+            )
+            
+            await interaction.followup.send(embed=success_embed, ephemeral=False)
+            
+            # Delete thread after 3 seconds
+            await asyncio.sleep(3)
+            if isinstance(interaction.channel, discord.Thread):
+                await interaction.channel.delete()
+            
+        except Exception as e:
+            print(f"Error adding manager: {e}")
+            await interaction.followup.send(
+                f"❌ Failed to add manager: {e}",
+                ephemeral=False
+            )
+    
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Decline manager request"""
+        if interaction.user.id != self.captain_id:
+            await interaction.response.send_message(
+                "❌ Only the team captain can decline this request.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_message(
+            "❌ Manager request declined.",
+            ephemeral=False
+        )
+        
+        # Delete thread after 3 seconds
+        await asyncio.sleep(3)
+        if isinstance(interaction.channel, discord.Thread):
+            await interaction.channel.delete()
+
+
+class ManagerRegistrationCog(commands.Cog):
+    """Manager registration system"""
+    
+    def __init__(self, bot):
+        self.bot = bot
+    
+    def create_manager_registration_embed(self):
+        """Create the manager registration embed message"""
+        embed = discord.Embed(
+            title="Manager Registration",
+            description="Want to become a manager for a team? Click the button below to get started.",
+            color=discord.Color.blue()
+        )
+        
+        # Requirements section
+        embed.add_field(
+            name="Requirements:",
+            value=(
+                "• The team must have less than 2 managers\n"
+                "• Team captain or existing manager must approve your request"
+            ),
+            inline=False
+        )
+        
+        # Process section
+        embed.add_field(
+            name="Process:",
+            value=(
+                "1. Click the Register button\n"
+                "2. Select the team you want to manage\n"
+                "3. Wait for captain/manager approval\n"
+                "4. Get notified once approved"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="",
+            value="**Managers help organize and lead their teams!**",
+            inline=False
+        )
+        
+        return embed
+    
+    async def send_manager_registration_message(self, channel_id: int):
+        """Send the manager registration embed to the specified channel"""
+        try:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                print(f"❌ Channel with ID {channel_id} not found!")
+                return
+            
+            # Purge old bot messages from the channel
+            print(f"🧹 Purging old bot messages from {channel.name}...")
+            deleted = await channel.purge(limit=100, check=lambda m: m.author == self.bot.user)
+            print(f"✅ Deleted {len(deleted)} old bot message(s)")
+            
+            embed = self.create_manager_registration_embed()
+            view = ManagerRegistrationButtons()
+            
+            # Load and attach logo
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "GFX", "LOGO.jpeg")
+            
+            if os.path.exists(logo_path):
+                file = discord.File(logo_path, filename="LOGO.jpeg")
+                embed.set_thumbnail(url="attachment://LOGO.jpeg")
+                await channel.send(file=file, embed=embed, view=view)
+                print(f"✅ Manager registration message sent to channel: {channel.name}")
+            else:
+                print(f"⚠️  Logo not found at {logo_path}, sending without logo")
+                await channel.send(embed=embed, view=view)
+            
+        except Exception as e:
+            print(f"❌ Error sending manager registration message: {e}")
+
+
+async def setup(bot):
+    """Setup function for cog - registers persistent views"""
+    cog = ManagerRegistrationCog(bot)
+    await bot.add_cog(cog)
+    
+    # Register persistent view so buttons work after bot restart
+    bot.add_view(ManagerRegistrationButtons())
+    print("✓ Manager registration persistent view registered")

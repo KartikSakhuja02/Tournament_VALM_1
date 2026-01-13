@@ -260,6 +260,14 @@ class Database:
             )
             return dict(row) if row else None
     
+    async def get_all_teams(self) -> List[Dict]:
+        """Get all teams"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM teams ORDER BY created_at DESC"
+            )
+            return [dict(row) for row in rows]
+    
     async def create_team(
         self,
         team_name: str,

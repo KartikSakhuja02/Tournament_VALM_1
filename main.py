@@ -23,7 +23,8 @@ async def load_commands():
     commands_to_load = [
         "commands.ping",
         "commands.registration",
-        "commands.team_registration"
+        "commands.team_registration",
+        "commands.manager_registration"
     ]
     
     for command in commands_to_load:
@@ -94,6 +95,21 @@ async def on_ready():
             print(f"❌ Error sending team registration message: {e}")
     else:
         print("⚠️  TEAM_REGISTRATION_CHANNEL_ID not set - skipping team registration message")
+    
+    # Send manager registration message on startup (if channel ID is configured)
+    manager_registration_channel_id = os.getenv("MANAGER_REGISTRATION_CHANNEL_ID")
+    if manager_registration_channel_id:
+        try:
+            channel_id = int(manager_registration_channel_id)
+            manager_registration_cog = bot.get_cog("ManagerRegistrationCog")
+            if manager_registration_cog:
+                await manager_registration_cog.send_manager_registration_message(channel_id)
+        except ValueError:
+            print("❌ Invalid MANAGER_REGISTRATION_CHANNEL_ID in .env file")
+        except Exception as e:
+            print(f"❌ Error sending manager registration message: {e}")
+    else:
+        print("⚠️  MANAGER_REGISTRATION_CHANNEL_ID not set - skipping manager registration message")
 
 # Run the bot
 if __name__ == "__main__":
