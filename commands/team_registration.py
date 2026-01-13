@@ -319,6 +319,91 @@ class TeamLogoUploadView(discord.ui.View):
             user_role=self.user_role
         )
         await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Skip Logo", style=discord.ButtonStyle.secondary)
+    async def skip_logo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Skip logo upload and complete registration"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your team registration.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        # Create team in database without logo
+        team = await db.create_team(
+            team_name=self.team_name,
+            team_tag=self.team_tag,
+            region=self.region,
+            captain_discord_id=interaction.user.id,
+            logo_url=None  # No logo
+        )
+        
+        # Add user as team member with their selected role
+        await db.add_team_member(
+            team_id=team['id'],
+            discord_id=interaction.user.id,
+            role=self.user_role  # 'captain' or 'manager'
+        )
+        
+        # Determine role display text
+        role_text = "team captain" if self.user_role == "captain" else "team manager"
+        
+        # Success message without logo
+        success_embed = discord.Embed(
+            title="✅ Team Registered Successfully!",
+            description=(
+                f"**Team Name:** `{self.team_name}`\n"
+                f"**Team Tag:** `{self.team_tag}`\n"
+                f"**Region:** `{self.region}`\n"
+                f"**Your Role:** {role_text.title()}\n\n"
+                f"Your team has been created! You are now the {role_text}.\n"
+                "You can add players, managers, and coaches to your team.\n\n"
+                "You can add a logo later by contacting an administrator."
+            ),
+            color=discord.Color.green()
+        )
+        
+        await interaction.followup.send(embed=success_embed, ephemeral=False)
+        
+        # Log to bot logs channel (without logo)
+        await self.log_team_registration_no_logo(interaction, team, role_text)
+        
+        # Close thread after 5 seconds
+        await asyncio.sleep(5)
+        if isinstance(interaction.channel, discord.Thread):
+            await interaction.channel.delete()
+    
+    async def log_team_registration_no_logo(self, interaction: discord.Interaction, team: dict, role_text: str):
+        """Log team registration to bot logs channel without logo"""
+        bot_logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+        if not bot_logs_channel_id:
+            return
+        
+        try:
+            channel = interaction.client.get_channel(int(bot_logs_channel_id))
+            if not channel:
+                return
+            
+            log_embed = discord.Embed(
+                title="New Team Registered (Thread)",
+                description=(
+                    f"**Team Name**\n{team['team_name']}\n\n"
+                    f"**Tag**\n[{team['team_tag']}]\n\n"
+                    f"**Region**\n{team['region']}\n\n"
+                    f"**{role_text.title()}**\n{interaction.user.mention} ({interaction.user.name})\n\n"
+                    f"**Logo**\nNot uploaded\n\n"
+                    f"**Team ID:** {team['id']} | **Captain ID:** {interaction.user.id} • **Method:** Thread • "
+                    f"<t:{int(team['created_at'].timestamp())}:f>"
+                ),
+                color=0x5865F2,  # Discord blurple
+                timestamp=team['created_at']
+            )
+            
+            await channel.send(embed=log_embed)
+            print(f"✓ Team registration logged (no logo)")
+            
+        except Exception as e:
+            print(f"Error logging team registration: {e}")
 
 
 class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
