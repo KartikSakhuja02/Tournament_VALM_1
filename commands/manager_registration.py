@@ -81,17 +81,26 @@ class ManagerRegistrationButtons(discord.ui.View):
             
             # Get teams with available manager slots
             teams = await db.get_all_teams()
+            print(f"[DEBUG] Total teams found: {len(teams)}")
+            
             teams_with_slots = []
             
             for team in teams:
                 members = await db.get_team_members(team['id'])
+                print(f"[DEBUG] Team '{team['team_name']}' has {len(members)} members")
+                
                 manager_count = sum(1 for m in members if m['role'] == 'manager')
+                print(f"[DEBUG] Team '{team['team_name']}' has {manager_count} managers")
+                
                 if manager_count < 2:  # Max 2 managers per team
                     available_slots = 2 - manager_count
                     teams_with_slots.append({
                         'team': team,
                         'available_slots': available_slots
                     })
+                    print(f"[DEBUG] Team '{team['team_name']}' added with {available_slots} slots")
+            
+            print(f"[DEBUG] Teams with available slots: {len(teams_with_slots)}")
             
             # Send team selection UI
             welcome_embed = discord.Embed(
