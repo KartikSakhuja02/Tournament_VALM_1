@@ -20,9 +20,9 @@ class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
     
     team_tag = discord.ui.TextInput(
         label="Team Tag",
-        placeholder="Enter your team tag (3-5 characters)",
+        placeholder="Enter your team tag (2-5 characters)",
         required=True,
-        min_length=3,
+        min_length=2,
         max_length=5,
         style=discord.TextStyle.short
     )
