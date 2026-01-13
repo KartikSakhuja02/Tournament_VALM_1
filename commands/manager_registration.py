@@ -21,12 +21,13 @@ class ManagerRegistrationButtons(discord.ui.View):
         # Respond immediately to prevent timeout
         await interaction.response.defer(ephemeral=True)
         
-        # Check if player is registered
-        player = await db.get_player_by_discord_id(interaction.user.id)
-        if not player:
+        # Check if user is already a manager of any team
+        existing_manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
+        if existing_manager_teams:
+            team_names = ", ".join([f"**{team['team_name']}**" for team in existing_manager_teams])
             await interaction.followup.send(
-                "❌ You must be registered as a player before becoming a manager.\n"
-                "Please use the player registration first.",
+                f"❌ You are already a manager for: {team_names}\n"
+                "Each person can only be a manager for the teams they're managing.",
                 ephemeral=True
             )
             return

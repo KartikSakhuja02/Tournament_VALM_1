@@ -355,6 +355,20 @@ class Database:
                 team_id, discord_id
             )
             return result == "DELETE 1"
+    
+    async def get_user_teams_by_role(self, discord_id: int, role: str) -> List[Dict]:
+        """Get all teams where user has a specific role"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT t.*, tm.role
+                FROM teams t
+                JOIN team_members tm ON t.id = tm.team_id
+                WHERE tm.discord_id = $1 AND tm.role = $2
+                """,
+                discord_id, role
+            )
+            return [dict(row) for row in rows]
 
 
 # Global database instance
