@@ -127,7 +127,8 @@ class RegionSelect(discord.ui.Select):
             user_id=self.user_id,
             ign=self.ign,
             player_id=self.player_id,
-            region=selected_region
+            region=selected_region,
+            allowed_users=self.allowed_users
         )
         
         await interaction.followup.send(embed=embed, view=consent_view)
@@ -136,17 +137,18 @@ class RegionSelect(discord.ui.Select):
 class ConsentView(discord.ui.View):
     """View with consent buttons"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, region: str):
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.region = region
+        self.allowed_users = allowed_users if allowed_users else [user_id]
     
     @discord.ui.button(label="I Consent", style=discord.ButtonStyle.success)
     async def consent_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle consent"""
-        if interaction.user.id != self.user_id:
+        if interaction.user.id not in self.allowed_users:
             await interaction.response.send_message("This is not your registration.", ephemeral=True)
             return
         
@@ -307,7 +309,7 @@ class ConsentView(discord.ui.View):
     @discord.ui.button(label="I Don't Consent", style=discord.ButtonStyle.secondary)
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle decline"""
-        if interaction.user.id != self.user_id:
+        if interaction.user.id not in self.allowed_users:
             await interaction.response.send_message("This is not your registration.", ephemeral=True)
             return
         

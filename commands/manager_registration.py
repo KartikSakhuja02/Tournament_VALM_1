@@ -160,16 +160,16 @@ class TeamSelect(discord.ui.Select):
         
         options = []
         
-        if not teams_with_slots:
-            # No teams available
-            options.append(
-                discord.SelectOption(
-                    label="No Teams Found",
-                    value="no_teams",
-                    description="Click here if no teams are available"
-                )
+        # Always add 'No Teams Found' / 'My Team Not Listed' option first
+        options.append(
+            discord.SelectOption(
+                label="My Team is Not Listed",
+                value="no_teams",
+                description="Click here if your team is not available"
             )
-        else:
+        )
+        
+        if teams_with_slots:
             # Add teams with available slots
             for item in teams_with_slots:
                 team = item['team']
@@ -199,11 +199,15 @@ class TeamSelect(discord.ui.Select):
         
         selected_value = self.values[0]
         
-        # Check if "No Teams Found" was selected
+        # Check if "My Team is Not Listed" was selected
         if selected_value == "no_teams":
             await interaction.followup.send(
-                "❌ No teams are currently available for management.\n"
-                "Please register your team first from the team registration channel.",
+                "❌ Your team is not listed.\n\n"
+                "**Possible reasons:**\n"
+                "• Your team hasn't been registered yet\n"
+                "• All manager slots are filled\n"
+                "• You're already a member of the team\n\n"
+                "Please register your team first from the team registration channel, or contact an administrator.",
                 ephemeral=False
             )
             
