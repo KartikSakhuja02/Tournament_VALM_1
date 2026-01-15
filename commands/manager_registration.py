@@ -21,13 +21,19 @@ class ManagerRegistrationButtons(discord.ui.View):
         # Respond immediately to prevent timeout
         await interaction.response.defer(ephemeral=True)
         
-        # Check if user is already a manager of any team
-        existing_manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
-        if existing_manager_teams:
-            team_names = ", ".join([f"**{team['team_name']}**" for team in existing_manager_teams])
+        # Check if user is already a member of any team (any role)
+        all_user_teams = []
+        all_teams = await db.get_all_teams()
+        for team in all_teams:
+            members = await db.get_team_members(team['id'])
+            if any(m['discord_id'] == interaction.user.id for m in members):
+                all_user_teams.append(team)
+        
+        if all_user_teams:
+            team_names = ", ".join([f"**{team['team_name']}**" for team in all_user_teams])
             await interaction.followup.send(
-                f"❌ You are already a manager for: {team_names}\n"
-                "Each person can only be a manager for the teams they're managing.",
+                f"❌ You are already part of: {team_names}\n"
+                "Each person can only be a member of the teams they're already in.",
                 ephemeral=True
             )
             return
@@ -79,7 +85,7 @@ class ManagerRegistrationButtons(discord.ui.View):
                 ephemeral=True
             )
             
-            # Get teams with available manager slots
+            # Get teams with available manager slots (excluding teams user is already in)
             teams = await db.get_all_teams()
             print(f"[DEBUG] Total teams found: {len(teams)}")
             
@@ -88,6 +94,11 @@ class ManagerRegistrationButtons(discord.ui.View):
             for team in teams:
                 members = await db.get_team_members(team['id'])
                 print(f"[DEBUG] Team '{team['team_name']}' has {len(members)} members")
+                
+                # Skip if user is already a member of this team
+                if any(m['discord_id'] == interaction.user.id for m in members):
+                    print(f"[DEBUG] Skipping team '{team['team_name']}' - user already a member")
+                    continue
                 
                 manager_count = sum(1 for m in members if m['role'] == 'manager')
                 print(f"[DEBUG] Team '{team['team_name']}' has {manager_count} managers")
