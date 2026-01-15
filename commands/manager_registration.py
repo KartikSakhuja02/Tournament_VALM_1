@@ -228,6 +228,11 @@ class TeamSelect(discord.ui.Select):
             )
             return
         
+        # Get existing managers
+        team_members = await db.get_team_members(team_id)
+        existing_managers = [m for m in team_members if m['role'] in ['captain', 'manager']]
+        approver_ids = [captain_id] + [m['discord_id'] for m in existing_managers if m['discord_id'] != captain_id]
+        
         # Add captain to thread
         try:
             await interaction.channel.add_user(captain)
@@ -235,20 +240,44 @@ class TeamSelect(discord.ui.Select):
         except Exception as e:
             print(f"Error adding captain to thread: {e}")
         
+        # Add existing managers to thread
+        for manager_data in existing_managers:
+            if manager_data['discord_id'] != captain_id:
+                try:
+                    manager = interaction.guild.get_member(manager_data['discord_id'])
+                    if manager:
+                        await interaction.channel.add_user(manager)
+                        print(f"✓ Added manager {manager.name} to thread")
+                        await asyncio.sleep(0.3)
+                except Exception as e:
+                    print(f"Error adding manager to thread: {e}")
+        
+        # Build mention string for approvers
+        approver_mentions = []
+        if captain:
+            approver_mentions.append(captain.mention)
+        for manager_data in existing_managers:
+            if manager_data['discord_id'] != captain_id:
+                manager = interaction.guild.get_member(manager_data['discord_id'])
+                if manager:
+                    approver_mentions.append(manager.mention)
+        
+        mentions_text = ", ".join(approver_mentions) if approver_mentions else "Team leadership"
+        
         # Send approval request
         approval_embed = discord.Embed(
             title="Manager Approval Request",
             description=(
-                f"{captain.mention}, {interaction.user.mention} wants to become a manager for your team!\n\n"
+                f"{mentions_text}, {interaction.user.mention} wants to become a manager for your team!\n\n"
                 f"**Team:** {selected_team['team_name']} [{selected_team['team_tag']}]\n"
                 f"**Applicant:** {interaction.user.mention} ({interaction.user.name})\n\n"
-                "Do you approve this manager request?"
+                "Any captain or existing manager can approve/decline this request."
             ),
             color=discord.Color.orange()
         )
         
         approval_view = ManagerApprovalView(
-            captain_id=captain_id,
+            approver_ids=approver_ids,
             applicant_id=interaction.user.id,
             team_id=team_id,
             team_name=selected_team['team_name']
@@ -258,11 +287,11 @@ class TeamSelect(discord.ui.Select):
 
 
 class ManagerApprovalView(discord.ui.View):
-    """View with accept/decline buttons for captain"""
+    """View with accept/decline buttons for captain and managers"""
     
-    def __init__(self, captain_id: int, applicant_id: int, team_id: int, team_name: str):
+    def __init__(self, approver_ids: list, applicant_id: int, team_id: int, team_name: str):
         super().__init__(timeout=300)
-        self.captain_id = captain_id
+        self.approver_ids = approver_ids
         self.applicant_id = applicant_id
         self.team_id = team_id
         self.team_name = team_name
@@ -270,9 +299,9 @@ class ManagerApprovalView(discord.ui.View):
     @discord.ui.button(label="Accept", style=discord.ButtonStyle.success)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Accept manager request"""
-        if interaction.user.id != self.captain_id:
+        if interaction.user.id not in self.approver_ids:
             await interaction.response.send_message(
-                "❌ Only the team captain can approve this request.",
+                "❌ Only the team captain or existing managers can approve this request.",
                 ephemeral=True
             )
             return
@@ -315,9 +344,9 @@ class ManagerApprovalView(discord.ui.View):
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Decline manager request"""
-        if interaction.user.id != self.captain_id:
+        if interaction.user.id not in self.approver_ids:
             await interaction.response.send_message(
-                "❌ Only the team captain can decline this request.",
+                "❌ Only the team captain or existing managers can decline this request.",
                 ephemeral=True
             )
             return
