@@ -52,23 +52,25 @@ class RegistrationModal(discord.ui.Modal, title="Player Registration"):
 class RegionSelectView(discord.ui.View):
     """View with region dropdown"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str):
+    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
+        self.allowed_users = allowed_users if allowed_users else [user_id]
         
         # Add region select menu
-        self.add_item(RegionSelect(user_id, ign, player_id))
+        self.add_item(RegionSelect(user_id, ign, player_id, self.allowed_users))
 
 
 class RegionSelect(discord.ui.Select):
     """Dropdown for region selection"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str):
+    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None):
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
+        self.allowed_users = allowed_users if allowed_users else [user_id]
         
         options = [
             discord.SelectOption(label="North America (NA)", value="NA"),
@@ -90,7 +92,7 @@ class RegionSelect(discord.ui.Select):
     
     async def callback(self, interaction: discord.Interaction):
         """Handle region selection"""
-        if interaction.user.id != self.user_id:
+        if interaction.user.id not in self.allowed_users:
             await interaction.response.send_message("This is not your registration.", ephemeral=True)
             return
         
@@ -558,10 +560,12 @@ class AssistedRegistrationModal(discord.ui.Modal, title="Player Registration"):
         await interaction.response.defer()
         
         # Create region selection view for the target user
+        # Allow both the target player and the person filling the form to select region
         region_view = RegionSelectView(
             user_id=self.target_user_id,
             ign=self.ign.value,
-            player_id=self.player_id.value
+            player_id=self.player_id.value,
+            allowed_users=[self.target_user_id, interaction.user.id]
         )
         
         embed = discord.Embed(
