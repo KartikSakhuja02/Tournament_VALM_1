@@ -741,25 +741,22 @@ class RegistrationButtons(discord.ui.View):
     )
     async def register_player_as_manager(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle manager/captain registering a player"""
-        await interaction.response.defer(ephemeral=True)
-        
-        # Check if user is a manager or captain of any team
+        # Check if user is a manager or captain of any team (before responding)
         manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
         captain_teams = await db.get_user_teams_by_role(interaction.user.id, 'captain')
         
         all_teams = manager_teams + captain_teams
         
         if not all_teams:
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 "❌ Only team managers and captains can use this feature.\n"
                 "You must be a manager or captain of a team to register players.",
                 ephemeral=True
             )
             return
         
-        # Show user search modal
-        modal = PlayerSearchModal(requester_id=interaction.user.id, all_teams=all_teams)
-        await interaction.followup.send(
+        # Show user search view
+        await interaction.response.send_message(
             "Please search for the player you want to register:",
             view=PlayerSearchView(requester_id=interaction.user.id, all_teams=all_teams),
             ephemeral=True
