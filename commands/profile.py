@@ -15,7 +15,7 @@ class ProfileCog(commands.Cog):
     
     @app_commands.command(name="profile", description="View your player profile")
     async def profile(self, interaction: discord.Interaction, member: discord.Member = None):
-        """Display player profile with agent video"""
+        """Display player profile with agent GIF"""
         # Defer the response since we might need to fetch files
         await interaction.response.defer()
         
@@ -33,70 +33,28 @@ class ProfileCog(commands.Cog):
             )
             return
         
-        # Get player stats
-        stats = await db.get_player_stats(target_user.id)
-        
-        # Create profile embed
-        embed = discord.Embed(
-            title=f"Player Profile: {player['ign']}",
-            description=f"**Region:** {player['region']}",
-            color=discord.Color.red()
-        )
-        
-        # Add basic info
-        embed.add_field(name="Discord", value=target_user.mention, inline=True)
-        embed.add_field(name="Player ID", value=f"`{player['player_id']}`", inline=True)
-        embed.add_field(name="Main Agent", value=player.get('agent', 'Not Set'), inline=True)
-        
-        # Add stats if available
-        if stats:
-            wins = stats.get('wins', 0)
-            losses = stats.get('losses', 0)
-            matches_played = stats.get('matches_played', 0)
-            
-            # Calculate win rate
-            win_rate = (wins / matches_played * 100) if matches_played > 0 else 0.0
-            
-            embed.add_field(
-                name="Statistics",
-                value=(
-                    f"**Matches Played:** {matches_played}\n"
-                    f"**Wins:** {wins}\n"
-                    f"**Losses:** {losses}\n"
-                    f"**Win Rate:** {win_rate:.1f}%"
-                ),
-                inline=False
-            )
-        
-        # Add tournament notifications status
-        notif_status = "✅ Enabled" if player.get('tournament_notifications', False) else "❌ Disabled"
-        embed.add_field(name="Tournament Notifications", value=notif_status, inline=False)
-        
-        # Set user avatar as thumbnail
-        embed.set_thumbnail(url=target_user.display_avatar.url)
-        
-        # Add timestamp
-        embed.timestamp = player.get('created_at')
-        embed.set_footer(text=f"Registered on")
-        
-        # Check if agent video exists
+        # Check if agent GIF exists
         agent = player.get('agent')
         if agent:
-            video_path = self.imports_dir / f"{agent.lower()}.mp4"
+            gif_path = self.imports_dir / f"{agent.lower()}.gif"
             
-            if video_path.exists():
-                # Send embed with video
-                video_file = discord.File(video_path, filename=f"{agent.lower()}.mp4")
-                await interaction.followup.send(embed=embed, file=video_file)
+            if gif_path.exists():
+                # Send GIF only
+                gif_file = discord.File(gif_path, filename=f"{agent.lower()}.gif")
+                await interaction.followup.send(file=gif_file)
             else:
-                # Video not found, just send embed
+                # GIF not found
                 await interaction.followup.send(
-                    content=f"⚠️ Agent video not found: `{video_path.name}`",
-                    embed=embed
+                    f"❌ Profile GIF not found for agent: **{agent}**\n"
+                    f"Expected file: `{gif_path.name}`",
+                    ephemeral=True
                 )
         else:
-            # No agent set, just send embed
-            await interaction.followup.send(embed=embed)
+            # No agent set
+            await interaction.followup.send(
+                f"❌ {target_user.mention} has not set a main agent yet.",
+                ephemeral=True
+            )
 
 
 async def setup(bot):

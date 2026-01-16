@@ -11,6 +11,7 @@ team_logos/
 imports/*.mp4
 imports/*.mov
 imports/*.avi
+imports/*.gif
 
 # Python
 __pycache__/
