@@ -50,13 +50,20 @@ class ProfileCog(commands.Cog):
         
         # Add stats if available
         if stats:
+            wins = stats.get('wins', 0)
+            losses = stats.get('losses', 0)
+            matches_played = stats.get('matches_played', 0)
+            
+            # Calculate win rate
+            win_rate = (wins / matches_played * 100) if matches_played > 0 else 0.0
+            
             embed.add_field(
                 name="Statistics",
                 value=(
-                    f"**Matches Played:** {stats['matches_played']}\n"
-                    f"**Wins:** {stats['wins']}\n"
-                    f"**Losses:** {stats['losses']}\n"
-                    f"**Win Rate:** {stats['win_rate']:.1f}%"
+                    f"**Matches Played:** {matches_played}\n"
+                    f"**Wins:** {wins}\n"
+                    f"**Losses:** {losses}\n"
+                    f"**Win Rate:** {win_rate:.1f}%"
                 ),
                 inline=False
             )
