@@ -39,9 +39,14 @@ class ProfileCog(commands.Cog):
             gif_path = self.imports_dir / f"{agent.lower()}.gif"
             
             if gif_path.exists():
-                # Send GIF only
+                # Send GIF with embed to make it display larger
                 gif_file = discord.File(gif_path, filename=f"{agent.lower()}.gif")
-                await interaction.followup.send(file=gif_file)
+                
+                # Create minimal embed to display image larger
+                embed = discord.Embed(color=discord.Color.red())
+                embed.set_image(url=f"attachment://{agent.lower()}.gif")
+                
+                await interaction.followup.send(embed=embed, file=gif_file)
             else:
                 # GIF not found
                 await interaction.followup.send(
