@@ -36,24 +36,14 @@ class ProfileCog(commands.Cog):
         # Check if agent GIF exists
         agent = player.get('agent')
         if agent:
-            gif_path = self.imports_dir / f"{agent.lower()}.gif"
+            # For now, using direct Giphy URL (you can create a mapping later)
+            gif_url = "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExanpna29xZXp2a29ncjAzd3Rha25sZWw4Mm4xaHN0bnkxOGd0M241bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/AGaIxp4zV38RIxsUMT/giphy.gif"
             
-            if gif_path.exists():
-                # Send GIF with embed to make it display larger
-                gif_file = discord.File(gif_path, filename=f"{agent.lower()}.gif")
-                
-                # Create minimal embed to display image larger
-                embed = discord.Embed(color=discord.Color.red())
-                embed.set_image(url=f"attachment://{agent.lower()}.gif")
-                
-                await interaction.followup.send(embed=embed, file=gif_file)
-            else:
-                # GIF not found
-                await interaction.followup.send(
-                    f"❌ Profile GIF not found for agent: **{agent}**\n"
-                    f"Expected file: `{gif_path.name}`",
-                    ephemeral=True
-                )
+            # Create embed with Giphy URL
+            embed = discord.Embed(color=discord.Color.red())
+            embed.set_image(url=gif_url)
+            
+            await interaction.followup.send(embed=embed)
         else:
             # No agent set
             await interaction.followup.send(
