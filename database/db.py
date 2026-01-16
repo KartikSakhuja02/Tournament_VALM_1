@@ -61,17 +61,18 @@ class Database:
         ign: str,
         player_id: str,
         region: str,
+        agent: str = None,
         tournament_notifications: bool = True
     ) -> Dict:
         """Create a new player"""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO players (discord_id, ign, player_id, region, tournament_notifications)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO players (discord_id, ign, player_id, region, agent, tournament_notifications)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *
                 """,
-                discord_id, ign, player_id, region, tournament_notifications
+                discord_id, ign, player_id, region, agent, tournament_notifications
             )
             return dict(row)
     

@@ -100,6 +100,97 @@ class RegionSelect(discord.ui.Select):
         
         selected_region = self.values[0]
         
+        # Show agent selection
+        agent_view = AgentSelectView(
+            user_id=self.user_id,
+            ign=self.ign,
+            player_id=self.player_id,
+            region=selected_region,
+            allowed_users=self.allowed_users
+        )
+        
+        embed = discord.Embed(
+            title="Select Your Main Agent",
+            description=(
+                f"**IGN:** `{self.ign}`\n"
+                f"**Player ID:** `{self.player_id}`\n"
+                f"**Region:** `{selected_region}`\n\n"
+                "Please select your main agent from the dropdown below."
+            ),
+            color=0xFF4654
+        )
+        
+        await interaction.followup.send(embed=embed, view=agent_view)
+
+
+class AgentSelectView(discord.ui.View):
+    """View with agent dropdown"""
+    
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.ign = ign
+        self.player_id = player_id
+        self.region = region
+        self.allowed_users = allowed_users if allowed_users else [user_id]
+        
+        # Add agent select menu
+        self.add_item(AgentSelect(user_id, ign, player_id, region, self.allowed_users))
+
+
+class AgentSelect(discord.ui.Select):
+    """Dropdown for agent selection"""
+    
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
+        self.user_id = user_id
+        self.ign = ign
+        self.player_id = player_id
+        self.region = region
+        self.allowed_users = allowed_users if allowed_users else [user_id]
+        
+        options = [
+            discord.SelectOption(label="Sage", value="Sage"),
+            discord.SelectOption(label="Phoenix", value="Phoenix"),
+            discord.SelectOption(label="Reyna", value="Reyna"),
+            discord.SelectOption(label="Sova", value="Sova"),
+            discord.SelectOption(label="Brimstone", value="Brimstone"),
+            discord.SelectOption(label="Raze", value="Raze"),
+            discord.SelectOption(label="Skye", value="Skye"),
+            discord.SelectOption(label="Jett", value="Jett"),
+            discord.SelectOption(label="Viper", value="Viper"),
+            discord.SelectOption(label="Breach", value="Breach"),
+            discord.SelectOption(label="Cypher", value="Cypher"),
+            discord.SelectOption(label="Killjoy", value="Killjoy"),
+            discord.SelectOption(label="Omen", value="Omen"),
+            discord.SelectOption(label="Yoru", value="Yoru"),
+            discord.SelectOption(label="Astra", value="Astra"),
+            discord.SelectOption(label="KAYO", value="KAYO"),
+            discord.SelectOption(label="Chamber", value="Chamber"),
+            discord.SelectOption(label="Neon", value="Neon"),
+            discord.SelectOption(label="Fade", value="Fade"),
+            discord.SelectOption(label="Gecko", value="Gecko"),
+            discord.SelectOption(label="Iso", value="Iso"),
+            discord.SelectOption(label="Clove", value="Clove"),
+            discord.SelectOption(label="Tejo", value="Tejo"),
+        ]
+        
+        super().__init__(
+            placeholder="Choose your main agent...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle agent selection"""
+        if interaction.user.id not in self.allowed_users:
+            await interaction.response.send_message("This is not your registration.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        selected_agent = self.values[0]
+        
         # Create consent embed
         embed = discord.Embed(
             title="Tournament Notifications & Terms",
@@ -127,7 +218,8 @@ class RegionSelect(discord.ui.Select):
             user_id=self.user_id,
             ign=self.ign,
             player_id=self.player_id,
-            region=selected_region,
+            region=self.region,
+            agent=selected_agent,
             allowed_users=self.allowed_users
         )
         
@@ -137,12 +229,13 @@ class RegionSelect(discord.ui.Select):
 class ConsentView(discord.ui.View):
     """View with consent buttons"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, agent: str, allowed_users: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.region = region
+        self.agent = agent
         self.allowed_users = allowed_users if allowed_users else [user_id]
     
     @discord.ui.button(label="I Consent", style=discord.ButtonStyle.success)
@@ -157,7 +250,7 @@ class ConsentView(discord.ui.View):
         # Save to database
         try:
             # Check if player already exists
-            existing_player = await db.get_player_by_discord_id(interaction.user.id)
+            existing_player = await db.get_player_by_discord_id(self.user_id)
             
             if existing_player:
                 await interaction.followup.send(
@@ -180,15 +273,16 @@ class ConsentView(discord.ui.View):
             
             # Create player in database
             await db.create_player(
-                discord_id=interaction.user.id,
+                discord_id=self.user_id,
                 ign=self.ign,
                 player_id=self.player_id,
                 region=self.region,
+                agent=self.agent,
                 tournament_notifications=True
             )
             
             # Create player stats entry
-            await db.create_player_stats(interaction.user.id)
+            await db.create_player_stats(self.user_id)
             
             # Assign region role(s)
             roles_to_assign = []
