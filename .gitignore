@@ -7,6 +7,11 @@ tournament-manager.service
 # Team logos (user uploaded content)
 team_logos/
 
+# Agent videos (large media files)
+imports/*.mp4
+imports/*.mov
+imports/*.avi
+
 # Python
 __pycache__/
 *.py[cod]
