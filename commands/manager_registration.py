@@ -331,6 +331,9 @@ class ManagerApprovalView(discord.ui.View):
                 role='manager'
             )
             
+            # Get team details for logging
+            team = await db.get_team_by_id(self.team_id)
+            
             # Success message
             applicant = interaction.guild.get_member(self.applicant_id)
             success_embed = discord.Embed(
@@ -344,6 +347,9 @@ class ManagerApprovalView(discord.ui.View):
             
             await interaction.followup.send(embed=success_embed, ephemeral=False)
             
+            # Log to bot logs channel
+            await self.log_manager_addition(interaction, applicant, team)
+            
             # Delete thread after 3 seconds
             await asyncio.sleep(3)
             if isinstance(interaction.channel, discord.Thread):
@@ -355,6 +361,36 @@ class ManagerApprovalView(discord.ui.View):
                 f"❌ Failed to add manager: {e}",
                 ephemeral=False
             )
+    
+    async def log_manager_addition(self, interaction: discord.Interaction, applicant: discord.Member, team: dict):
+        """Log manager addition to bot logs channel"""
+        bot_logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+        if not bot_logs_channel_id:
+            return
+        
+        try:
+            channel = interaction.client.get_channel(int(bot_logs_channel_id))
+            if not channel:
+                return
+            
+            log_embed = discord.Embed(
+                title="New Manager Added",
+                description=(
+                    f"**Team**\n{team['team_name']} [{team['team_tag']}]\n\n"
+                    f"**Manager**\n{applicant.mention} ({applicant.name})\n\n"
+                    f"**Approved By**\n{interaction.user.mention} ({interaction.user.name})\n\n"
+                    f"**Team ID:** {team['id']} | **Manager ID:** {applicant.id} • "
+                    f"<t:{int(interaction.created_at.timestamp())}:f>"
+                ),
+                color=0x5865F2,  # Discord blurple
+                timestamp=interaction.created_at
+            )
+            
+            await channel.send(embed=log_embed)
+            print(f"✓ Manager addition logged: {applicant.name} to {team['team_name']}")
+            
+        except Exception as e:
+            print(f"Error logging manager addition: {e}")
     
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):

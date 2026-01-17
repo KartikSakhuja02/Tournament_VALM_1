@@ -261,6 +261,15 @@ class Database:
             )
             return dict(row) if row else None
     
+    async def get_team_by_id(self, team_id: int) -> Optional[Dict]:
+        """Get team by team ID"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM teams WHERE id = $1",
+                team_id
+            )
+            return dict(row) if row else None
+    
     async def get_all_teams(self) -> List[Dict]:
         """Get all teams"""
         async with self.pool.acquire() as conn:
