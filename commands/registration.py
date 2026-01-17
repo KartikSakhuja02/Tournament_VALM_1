@@ -52,25 +52,27 @@ class RegistrationModal(discord.ui.Modal, title="Player Registration"):
 class RegionSelectView(discord.ui.View):
     """View with region dropdown"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None, assisted_teams: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.allowed_users = allowed_users if allowed_users else [user_id]
+        self.assisted_teams = assisted_teams  # Teams for assisted registration
         
         # Add region select menu
-        self.add_item(RegionSelect(user_id, ign, player_id, self.allowed_users))
+        self.add_item(RegionSelect(user_id, ign, player_id, self.allowed_users, assisted_teams))
 
 
 class RegionSelect(discord.ui.Select):
     """Dropdown for region selection"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, allowed_users: list = None, assisted_teams: list = None):
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.allowed_users = allowed_users if allowed_users else [user_id]
+        self.assisted_teams = assisted_teams
         
         options = [
             discord.SelectOption(label="North America (NA)", value="NA"),
@@ -106,7 +108,8 @@ class RegionSelect(discord.ui.Select):
             ign=self.ign,
             player_id=self.player_id,
             region=selected_region,
-            allowed_users=self.allowed_users
+            allowed_users=self.allowed_users,
+            assisted_teams=self.assisted_teams
         )
         
         embed = discord.Embed(
@@ -126,27 +129,29 @@ class RegionSelect(discord.ui.Select):
 class AgentSelectView(discord.ui.View):
     """View with agent dropdown"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None, assisted_teams: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.region = region
         self.allowed_users = allowed_users if allowed_users else [user_id]
+        self.assisted_teams = assisted_teams
         
         # Add agent select menu
-        self.add_item(AgentSelect(user_id, ign, player_id, region, self.allowed_users))
+        self.add_item(AgentSelect(user_id, ign, player_id, region, self.allowed_users, assisted_teams))
 
 
 class AgentSelect(discord.ui.Select):
     """Dropdown for agent selection"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, allowed_users: list = None, assisted_teams: list = None):
         self.user_id = user_id
         self.ign = ign
         self.player_id = player_id
         self.region = region
         self.allowed_users = allowed_users if allowed_users else [user_id]
+        self.assisted_teams = assisted_teams
         
         options = [
             discord.SelectOption(label="Sage", value="Sage"),
@@ -220,7 +225,8 @@ class AgentSelect(discord.ui.Select):
             player_id=self.player_id,
             region=self.region,
             agent=selected_agent,
-            allowed_users=self.allowed_users
+            allowed_users=self.allowed_users,
+            assisted_teams=self.assisted_teams
         )
         
         await interaction.followup.send(embed=embed, view=consent_view)
@@ -229,7 +235,7 @@ class AgentSelect(discord.ui.Select):
 class ConsentView(discord.ui.View):
     """View with consent buttons"""
     
-    def __init__(self, user_id: int, ign: str, player_id: str, region: str, agent: str, allowed_users: list = None):
+    def __init__(self, user_id: int, ign: str, player_id: str, region: str, agent: str, allowed_users: list = None, assisted_teams: list = None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.ign = ign
@@ -237,6 +243,7 @@ class ConsentView(discord.ui.View):
         self.region = region
         self.agent = agent
         self.allowed_users = allowed_users if allowed_users else [user_id]
+        self.assisted_teams = assisted_teams
     
     @discord.ui.button(label="I Consent", style=discord.ButtonStyle.success)
     async def consent_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -283,6 +290,19 @@ class ConsentView(discord.ui.View):
             
             # Create player stats entry
             await db.create_player_stats(self.user_id)
+            
+            # If this is assisted registration, add player to the assisting manager/captain's teams
+            if self.assisted_teams:
+                for team in self.assisted_teams:
+                    try:
+                        await db.add_team_member(
+                            team_id=team['id'],
+                            discord_id=self.user_id,
+                            role='player'
+                        )
+                        print(f"✓ Added {self.ign} to team {team['team_name']} as player")
+                    except Exception as e:
+                        print(f"✗ Failed to add {self.ign} to team {team['team_name']}: {e}")
             
             # Assign region role(s)
             roles_to_assign = []
@@ -384,6 +404,15 @@ class ConsentView(discord.ui.View):
         success_embed.add_field(name="IGN", value=f"```{self.ign}```", inline=True)
         success_embed.add_field(name="Player ID", value=f"```{self.player_id}```", inline=True)
         success_embed.add_field(name="Region", value=f"```{self.region}```", inline=True)
+        
+        # Add teams field if this is assisted registration
+        if self.assisted_teams:
+            team_names = ", ".join([f"**{team['team_name']}**" for team in self.assisted_teams])
+            success_embed.add_field(
+                name="Teams",
+                value=f"You have been added to: {team_names}",
+                inline=False
+            )
         
         success_embed.add_field(
             name="What's Next?",
@@ -584,7 +613,11 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             welcome_embed.set_footer(text="Click 'Fill Form' to continue")
             
             # Create view with form button (anyone can fill)
-            form_view = AssistedRegistrationView(target_user_id=target_user.id, requester_id=interaction.user.id)
+            form_view = AssistedRegistrationView(
+                target_user_id=target_user.id, 
+                requester_id=interaction.user.id,
+                all_teams=self.all_teams
+            )
             
             await thread.send(embed=welcome_embed, view=form_view)
             
@@ -608,10 +641,11 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
 class AssistedRegistrationView(discord.ui.View):
     """View for assisted registration - both player and manager can fill form"""
     
-    def __init__(self, target_user_id: int, requester_id: int):
+    def __init__(self, target_user_id: int, requester_id: int, all_teams: list):
         super().__init__(timeout=300)
         self.target_user_id = target_user_id
         self.requester_id = requester_id
+        self.all_teams = all_teams
     
     @discord.ui.button(label="Fill Form", style=discord.ButtonStyle.primary)
     async def fill_form(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -623,8 +657,11 @@ class AssistedRegistrationView(discord.ui.View):
             )
             return
         
-        # Show modal with target user's ID
-        modal = AssistedRegistrationModal(target_user_id=self.target_user_id)
+        # Show modal with target user's ID and teams
+        modal = AssistedRegistrationModal(
+            target_user_id=self.target_user_id,
+            all_teams=self.all_teams
+        )
         await interaction.response.send_modal(modal)
 
 
@@ -647,9 +684,10 @@ class AssistedRegistrationModal(discord.ui.Modal, title="Player Registration"):
         style=discord.TextStyle.short
     )
     
-    def __init__(self, target_user_id: int):
+    def __init__(self, target_user_id: int, all_teams: list):
         super().__init__()
         self.target_user_id = target_user_id
+        self.all_teams = all_teams
     
     async def on_submit(self, interaction: discord.Interaction):
         """Handle form submission - show region selector"""
@@ -661,7 +699,8 @@ class AssistedRegistrationModal(discord.ui.Modal, title="Player Registration"):
             user_id=self.target_user_id,
             ign=self.ign.value,
             player_id=self.player_id.value,
-            allowed_users=[self.target_user_id, interaction.user.id]
+            allowed_users=[self.target_user_id, interaction.user.id],
+            assisted_teams=self.all_teams
         )
         
         embed = discord.Embed(
