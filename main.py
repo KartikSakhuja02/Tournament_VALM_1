@@ -24,8 +24,7 @@ async def load_commands():
         "commands.ping",
         "commands.registration",
         "commands.team_registration",
-        "commands.manager_registration",
-        "commands.profile"
+        "commands.manager_registration"
     ]
     
     for command in commands_to_load:
