@@ -710,6 +710,19 @@ class TeamLeaveConfirmView(discord.ui.View):
         await interaction.response.defer()
         
         try:
+            # Get team details before removing
+            team = await db.get_team_by_id(self.team_id)
+            
+            # Get all captains and managers to notify
+            captains = await db.get_user_teams_by_role(team['captain_discord_id'], 'captain')
+            managers = await db.get_team_members(self.team_id)
+            
+            # Collect captain/manager IDs
+            leadership_ids = [team['captain_discord_id']]
+            for member in managers:
+                if member['role'] in ['manager'] and member['discord_id'] not in leadership_ids:
+                    leadership_ids.append(member['discord_id'])
+            
             # Remove user from team
             await db.remove_team_member(self.team_id, interaction.user.id)
             
@@ -719,6 +732,26 @@ class TeamLeaveConfirmView(discord.ui.View):
                 color=discord.Color.green()
             )
             await interaction.followup.send(embed=success_embed)
+            
+            # Notify all captains and managers
+            for leader_id in leadership_ids:
+                if leader_id == interaction.user.id:
+                    continue  # Don't notify if they're leaving their own team as captain/manager
+                
+                try:
+                    leader = self.guild.get_member(leader_id)
+                    if leader:
+                        notify_embed = discord.Embed(
+                            title="Team Member Left",
+                            description=(
+                                f"{interaction.user.mention} has left **{self.team_name}** [{team['team_tag']}].\n\n"
+                                f"**Previous Role:** {self.user_role.title()}"
+                            ),
+                            color=discord.Color.orange()
+                        )
+                        await leader.send(embed=notify_embed)
+                except:
+                    pass  # Silently fail if can't DM
             
             # Log to bot logs
             await self.log_leave(interaction)
