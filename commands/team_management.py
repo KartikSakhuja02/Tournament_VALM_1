@@ -994,15 +994,16 @@ class TeamDisbandConfirmView(discord.ui.View):
                 ),
                 color=discord.Color.green()
             )
-            await interaction.followup.send(embed=success_embed)
+            
+            # Disable buttons first
+            for item in self.children:
+                item.disabled = True
+            
+            # Edit the original message with disabled buttons
+            await interaction.edit_original_response(embed=success_embed, view=self)
             
             # Log to bot logs
             await self.log_disband(interaction, team, len(team_members))
-            
-            # Disable buttons
-            for item in self.children:
-                item.disabled = True
-            await interaction.message.edit(view=self)
             
             print(f"✓ Team {self.team_name} disbanded by {interaction.user.name}")
             
@@ -1019,12 +1020,13 @@ class TeamDisbandConfirmView(discord.ui.View):
             description=f"**{self.team_name}** has not been disbanded.",
             color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=cancel_embed)
         
-        # Disable buttons
+        # Disable buttons first
         for item in self.children:
             item.disabled = True
-        await interaction.message.edit(view=self)
+        
+        # Edit the original message with disabled buttons
+        await interaction.edit_original_response(embed=cancel_embed, view=self)
     
     async def log_disband(self, interaction: discord.Interaction, team: dict, member_count: int):
         """Log team disband to bot logs channel"""
