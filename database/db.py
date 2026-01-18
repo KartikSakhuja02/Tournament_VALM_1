@@ -379,6 +379,15 @@ class Database:
                 discord_id, role
             )
             return [dict(row) for row in rows]
+    
+    async def delete_team(self, team_id: int) -> bool:
+        """Delete a team (this will cascade delete team_members due to foreign key constraint)"""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM teams WHERE id = $1",
+                team_id
+            )
+            return result == "DELETE 1"
 
 
 # Global database instance

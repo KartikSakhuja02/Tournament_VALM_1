@@ -1,16 +1,23 @@
-# Team Invite System - Implementation Summary
+# Team Management System - Complete Documentation
 
 ## What Was Implemented
 
-### 1. **New `/invite` Command**
-- **Location**: `commands/team_management.py` (new file)
-- **Usage**: `/invite @playername`
-- **Purpose**: Captains and managers can invite registered players to their teams
-- **Restrictions**: Command can only be used in the designated commands channel
+### Commands Overview
 
-### 2. **Features**
+| Command | Who Can Use | Purpose |
+|---------|------------|---------|
+| `/invite @player` | Captains, Managers | Invite registered players to team |
+| `/leave` | Any team member | Leave a team you're part of |
+| `/kick @player` | Captains, Managers | Remove a player from your team |
+| `/disband` | Captains, Managers | Permanently delete your team |
 
-#### **Command Validation**
+All commands are restricted to the designated commands channel (configurable via `COMMANDS_CHANNEL_ID`).
+
+---
+
+## 1. `/invite @player` Command
+
+### Features
 - Only captains and managers can send invites
 - Invited player must be registered already
 - Cannot invite yourself
@@ -45,6 +52,93 @@
 - Checks if player already member before adding
 - Proper error messages for all edge cases
 
+---
+
+## 2. `/leave` Command
+
+### Features
+- Any team member (captain, manager, player, coach) can leave their team
+- Multi-team support: If member of multiple teams, dropdown to choose which to leave
+- Sends DM confirmation before leaving
+- Accept/Cancel buttons in DM for safety
+- Logs all leaves to BOT_LOGS_CHANNEL
+
+### Flow
+1. User runs `/leave`
+2. Bot checks which teams user is part of
+3. If multiple teams → dropdown to select which to leave
+4. Bot sends DM with team info and confirmation buttons
+5. User clicks "Confirm Leave" or "Cancel"
+6. If confirmed → removed from team, logged
+
+### Safety Features
+- Cannot accidentally leave (requires DM confirmation)
+- Shows team name, tag, region, and your role before confirming
+- Warning that action cannot be undone
+- Cancel option available
+
+---
+
+## 3. `/kick @player` Command
+
+### Features
+- Only captains and managers can kick players
+- Cannot kick team captains (protection)
+- Cannot kick yourself (use `/leave` instead)
+- Multi-team support: Choose which team to kick player from
+- Kicked player receives DM notification
+- Logs all kicks to BOT_LOGS_CHANNEL
+
+### Flow
+1. Captain/Manager runs `/kick @player`
+2. Bot checks kicker's permissions
+3. Bot finds which teams both kicker and target player share
+4. If multiple teams → dropdown to select which team
+5. Player is removed from team
+6. Kicked player gets DM notification
+7. Action is logged
+
+### Safety Features
+- Cannot kick captains (prevents team hijacking)
+- Kicker must be captain/manager of the team
+- Both kicker and kicked player get confirmation
+- All kicks are logged for moderation
+
+---
+
+## 4. `/disband` Command
+
+### Features
+- Only captains and managers can disband teams
+- Multi-team support: Choose which team to disband if managing multiple
+- Shows team info and member count before confirming
+- **ALL team members** are notified via DM
+- Team and all team_members entries are permanently deleted
+- Comprehensive logging to BOT_LOGS_CHANNEL
+
+### Flow
+1. Captain/Manager runs `/disband`
+2. If multiple teams → dropdown to select which team
+3. Bot shows confirmation with warnings
+4. User clicks "⚠️ DISBAND TEAM" or "Cancel"
+5. If confirmed:
+   - All team members removed
+   - Each member gets DM notification
+   - Team is deleted from database
+   - Action is logged with member count
+
+### Safety Features
+- ⚠️ **PERMANENT ACTION** warning in confirmation
+- Shows member count before disbanding
+- Clear explanation that action cannot be undone
+- All members are notified
+- Cancel option available
+- Counts how many members were successfully notified
+
+---
+
+## Command Channel Restriction
+
 ### 3. **Command Channel Restriction**
 - **New File**: `utils/checks.py`
 - **New Decorator**: `@commands_channel_only()`
@@ -54,16 +148,28 @@
   - If not set, commands work everywhere
   - Shows error message with channel mention if used in wrong channel
 
-### 4. **Database Operations**
-- Uses existing `db.get_user_teams_by_role()` to get captain/manager teams
-- Uses existing `db.get_player_by_discord_id()` to verify registration
-- Uses existing `db.get_team_members()` to check for duplicates
-- Uses existing `db.add_team_member()` to add player to team
-- Uses existing `db.get_team_by_id()` for logging
+---
 
-## How It Works
+## Database Operations
 
-### Flow Diagram
+### New Methods Added
+- ✅ `db.delete_team(team_id)` - Deletes team (cascades to team_members)
+
+### Existing Methods Used
+- `db.get_user_teams_by_role()` - Get teams where user has specific role
+- `db.get_player_by_discord_id()` - Verify player registration
+- `db.get_team_members()` - Check team membership and get all members
+- `db.add_team_member()` - Add player to team
+- `db.remove_team_member()` - Remove player from team
+- `db.get_team_by_id()` - Get team details for logging
+
+---
+
+## How It Works - Complete Flow Diagrams
+
+### `/invite` Flow
+
+### `/invite` Flow
 
 ```
 /invite @player
@@ -84,6 +190,64 @@ Player clicks Accept or Decline
 [Decline] → Notify both → End
 ```
 
+### `/leave` Flow
+
+```
+/leave
+    ↓
+Check which teams user is part of
+    ↓
+[If multiple teams] → Show team selection dropdown
+    ↓
+Send DM confirmation to user
+    ↓
+User clicks "Confirm Leave" or "Cancel"
+    ↓
+[Confirm] → Remove from team → Log → Success message
+[Cancel] → Cancel message → End
+```
+
+### `/kick` Flow
+
+```
+/kick @player
+    ↓
+Check if user is captain/manager
+    ↓
+Check if target player is on any of user's teams
+    ↓
+Check if target is a captain (cannot kick captains)
+    ↓
+[If multiple shared teams] → Show team selection dropdown
+    ↓
+Remove player from team
+    ↓
+Send DM to kicked player → Notify kicker → Log
+```
+
+### `/disband` Flow
+
+```
+/disband
+    ↓
+Check if user is captain/manager
+    ↓
+[If multiple teams] → Show team selection dropdown
+    ↓
+Show confirmation with team info & member count
+    ↓
+User clicks "⚠️ DISBAND TEAM" or "Cancel"
+    ↓
+[Confirm] → Get all team members
+           → Delete team from database
+           → Send DM to each member
+           → Log with stats
+           → Success message
+[Cancel] → Cancel message → End
+```
+
+---
+
 ## Configuration
 
 ### Required Environment Variables
@@ -97,7 +261,9 @@ COMMANDS_CHANNEL_ID=your_commands_channel_id_here
 - If `COMMANDS_CHANNEL_ID` is not set, commands work in all channels
 - If set, commands are restricted to that specific channel only
 
-## Key Differences from "Register Your Player"
+---
+
+## Comparison: Assisted Registration vs Invite
 
 | Feature | Register Your Player | Invite Player |
 |---------|---------------------|---------------|
@@ -107,18 +273,29 @@ COMMANDS_CHANNEL_ID=your_commands_channel_id_here
 | **Registration** | Creates new player record | No registration, just team join |
 | **Use Case** | "My player is lazy, let me register them" | "Join my team!" |
 
+---
+
 ## Files Modified/Created
 
 ### New Files
-1. ✅ `commands/team_management.py` - Team invite command and views (328 lines)
-2. ✅ `utils/checks.py` - Command channel restriction decorator (27 lines)
+1. ✅ `commands/team_management.py` - All team management commands (787 lines)
+   - `/invite` - Invite players to teams
+   - `/leave` - Leave a team
+   - `/kick` - Remove players from teams
+   - `/disband` - Delete teams permanently
+2. ✅ `utils/checks.py` - Command channel restriction decorator
+3. ✅ `utils/__init__.py` - Utils package initialization
 
 ### Modified Files
 1. ✅ `main.py` - Added team_management to cog loading
 2. ✅ `.env.example` - Added COMMANDS_CHANNEL_ID
+3. ✅ `database/db.py` - Added `delete_team()` method
+
+---
 
 ## Testing Checklist
 
+### `/invite` Command
 - [ ] Captain can send `/invite` command
 - [ ] Manager can send `/invite` command
 - [ ] Non-captain/manager cannot send invites
@@ -131,12 +308,50 @@ COMMANDS_CHANNEL_ID=your_commands_channel_id_here
 - [ ] Inviter gets DM notification on accept/decline
 - [ ] Bot logs channel receives join log
 - [ ] Buttons disable after response
-- [ ] Command only works in COMMANDS_CHANNEL_ID
 - [ ] Proper error if DMs disabled
+
+### `/leave` Command
+- [ ] Any team member can use `/leave`
+- [ ] Multi-team members see dropdown
+- [ ] DM confirmation sent with team details
+- [ ] Confirm button removes from team
+- [ ] Cancel button keeps in team
+- [ ] Bot logs channel receives leave log
+- [ ] Buttons disable after response
+- [ ] Works for captains, managers, players, coaches
+
+### `/kick` Command
+- [ ] Only captains/managers can kick
+- [ ] Cannot kick captains
+- [ ] Cannot kick yourself
+- [ ] Multi-team selection works
+- [ ] Kicked player receives DM
+- [ ] Kicker receives confirmation
+- [ ] Bot logs channel receives kick log
+- [ ] Player is actually removed from database
+
+### `/disband` Command
+- [ ] Only captains/managers can disband
+- [ ] Multi-team selection works
+- [ ] Shows member count before confirming
+- [ ] ⚠️ Warning message displays
+- [ ] All members receive DM notification
+- [ ] Team deleted from database
+- [ ] Team_members entries deleted (cascade)
+- [ ] Bot logs channel receives disband log
+- [ ] Cancel button works
+- [ ] Success message shows notification count
+
+### General
+- [ ] Command only works in COMMANDS_CHANNEL_ID
+- [ ] Proper error if used in wrong channel
+- [ ] All DM failures handled gracefully
+
+---
 
 ## Usage Examples
 
-### Example 1: Single Team Captain
+### Example 1: `/invite` - Single Team Captain
 ```
 Captain: /invite @Player123
 Bot: ✅ Team invite sent to @Player123 via DM!
@@ -165,26 +380,105 @@ Bot: ✅ Team invite sent to @Player456 via DM!
 [Rest follows same flow as Example 1]
 ```
 
-### Example 3: Wrong Channel
+### Example 3: `/leave` - Multi-Team Player
+```
+Player: /leave
+Bot: Select which team you want to leave:
+     [Dropdown]
+     - Team Alpha [ALPHA] (Role: Player | Region: EMEA)
+     - Team Beta [BETA] (Role: Player | Region: AMERICAS)
+
+Player: [Selects Team Alpha]
+Bot: ✅ Leave confirmation sent to your DMs!
+
+[Player receives DM]
+Team: Team Alpha [ALPHA]
+Region: EMEA
+Your Role: Player
+⚠️ This action cannot be undone.
+
+[Player clicks "Confirm Leave"]
+Player: ✅ You have successfully left Team Alpha.
+```
+
+### Example 4: `/kick` - Manager Kicks Player
+```
+Manager: /kick @Player789
+Bot: ✅ @Player789 has been kicked from Phoenix Strikers!
+
+[Player789 receives DM]
+You have been removed from Phoenix Strikers [PHX].
+Removed by: @Manager
+Team Region: APAC
+```
+
+### Example 5: `/disband` - Captain Disbands Team
+```
+Captain: /disband
+Bot: ⚠️ Are you sure you want to disband Phoenix Strikers?
+     Team Tag: PHX
+     Region: APAC
+     Members: 7
+     ⚠️ This action is PERMANENT and cannot be undone!
+     
+[Captain clicks "⚠️ DISBAND TEAM"]
+Bot: ✅ Phoenix Strikers has been successfully disbanded.
+     • Team members notified: 6/6
+     • All team data has been deleted
+
+[All 6 members receive DM]
+Phoenix Strikers [PHX] has been disbanded.
+Disbanded by: @Captain
+The team no longer exists and all members have been removed.
+```
+
+### Example 6: Wrong Channel
 ```
 Player: /invite @Someone
 Bot: ❌ Commands can only be used in #bot-commands
 ```
 
-## Notes
+---
 
-- Invite system is completely separate from "Register Your Player"
-- Players added via invite have role='player' in team_members table
-- No limit on how many teams a player can join (implement if needed)
-- Invites don't expire (persistent view with timeout=None)
-- DM privacy is respected - graceful error if DMs disabled
-- All team actions are logged to BOT_LOGS_CHANNEL
+## Important Notes
+
+### Permissions & Safety
+- Only captains and managers can: `/invite`, `/kick`, `/disband`
+- Any team member can: `/leave`
+- Captains CANNOT be kicked (protection against team hijacking)
+- `/disband` is PERMANENT - team and all data deleted forever
+
+### DM Requirements
+- All commands that notify players use DMs
+- If a player has DMs disabled, they won't receive notifications
+- Commands fail gracefully if DMs are disabled
+- Encourage users to enable DMs from server members
+
+### Database Behavior
+- `/disband` triggers CASCADE DELETE on team_members table
+- Team logo files are NOT deleted from filesystem (manual cleanup may be needed)
+- Player records remain intact after leaving/being kicked
+- Only team and team_member entries are affected
+
+### Multi-Team Support
+- All commands support users managing/being part of multiple teams
+- Dropdown selections appear when multiple teams are involved
+- Each action is isolated to the selected team only
+
+### Logging
+- All team actions logged to BOT_LOGS_CHANNEL
+- Logs include: team info, user info, timestamps, IDs
+- Disband logs include member count
+- Color-coded: Green (join), Orange (leave), Red (kick), Dark Red (disband)
+
+---
 
 ## Future Enhancements (Optional)
 
-- Add `/leave` command for players to leave teams
-- Add `/kick` command for captains/managers to remove players
 - Add `/roster` command to view team members
 - Add invite expiration (e.g., 24 hours)
 - Add limit on number of teams per player
 - Add team capacity limits
+- Add `/promote` command to change member roles
+- Cleanup team logo files when team is disbanded
+
