@@ -429,6 +429,94 @@ class TeamManagementCog(commands.Cog):
             view=view,
             ephemeral=True
         )
+    
+    @app_commands.command(name="transfer-captainship", description="Transfer team captainship to another member")
+    @commands_channel_only()
+    async def transfer_captainship(self, interaction: discord.Interaction):
+        """Transfer captainship to another team member"""
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check if user is a captain
+        captain_teams = await db.get_user_teams_by_role(interaction.user.id, 'captain')
+        
+        if not captain_teams:
+            await interaction.followup.send(
+                "❌ You must be a team captain to transfer captainship!",
+                ephemeral=True
+            )
+            return
+        
+        # If multiple teams, let them choose which team
+        if len(captain_teams) > 1:
+            view = TransferCaptainshipTeamSelectView(
+                captain_id=interaction.user.id,
+                teams=captain_teams,
+                guild=interaction.guild
+            )
+            await interaction.followup.send(
+                "Select which team's captainship you want to transfer:",
+                view=view,
+                ephemeral=True
+            )
+        else:
+            # Only one team, show member selection directly
+            team = captain_teams[0]
+            await self.show_transfer_member_selection(interaction, team)
+    
+    async def show_transfer_member_selection(self, interaction: discord.Interaction, team: dict):
+        """Show member selection for captainship transfer"""
+        # Get all team members
+        team_members = await db.get_team_members(team['id'])
+        
+        # Filter out the current captain and only include players/managers
+        eligible_members = [
+            m for m in team_members 
+            if m['discord_id'] != interaction.user.id 
+            and m['role'] in ['player', 'manager']
+        ]
+        
+        if not eligible_members:
+            await interaction.followup.send(
+                "❌ No eligible members to transfer captainship to!\n"
+                "Only players and managers can become captain.",
+                ephemeral=True
+            )
+            return
+        
+        # Send DM with member selection
+        try:
+            transfer_embed = discord.Embed(
+                title="Transfer Captainship",
+                description=(
+                    f"**Team:** {team['team_name']} [{team['team_tag']}]\n"
+                    f"**Region:** {team['region']}\n\n"
+                    f"Select the member you want to transfer captainship to.\n"
+                    f"They will become the new team captain."
+                ),
+                color=discord.Color.blue()
+            )
+            
+            view = TransferCaptainshipMemberSelectView(
+                team_id=team['id'],
+                team_name=team['team_name'],
+                current_captain_id=interaction.user.id,
+                members=eligible_members,
+                guild=interaction.guild
+            )
+            
+            dm_channel = await interaction.user.create_dm()
+            await dm_channel.send(embed=transfer_embed, view=view)
+            
+            await interaction.followup.send(
+                "✅ Member selection sent to your DMs!",
+                ephemeral=True
+            )
+            
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Could not send DM. Please enable DMs from server members.",
+                ephemeral=True
+            )
 
 
 class TeamInviteSelectView(discord.ui.View):
@@ -1058,6 +1146,214 @@ class TeamDisbandConfirmView(discord.ui.View):
             
         except Exception as e:
             print(f"Error logging disband: {e}")
+
+
+class TransferCaptainshipTeamSelectView(discord.ui.View):
+    """View for selecting which team to transfer captainship for"""
+    
+    def __init__(self, captain_id: int, teams: list, guild: discord.Guild):
+        super().__init__(timeout=300)
+        self.captain_id = captain_id
+        self.teams = teams
+        self.guild = guild
+        self.add_item(TransferCaptainshipTeamSelect(captain_id, teams, guild))
+
+
+class TransferCaptainshipTeamSelect(discord.ui.Select):
+    """Dropdown for team selection when transferring captainship"""
+    
+    def __init__(self, captain_id: int, teams: list, guild: discord.Guild):
+        self.captain_id = captain_id
+        self.teams = teams
+        self.guild = guild
+        
+        options = []
+        for team in teams:
+            options.append(
+                discord.SelectOption(
+                    label=f"{team['team_name']} [{team['team_tag']}]",
+                    value=str(team['id']),
+                    description=f"Region: {team['region']}"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select team to transfer captainship...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.captain_id:
+            await interaction.response.send_message("This is not your selection.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        team_id = int(self.values[0])
+        selected_team = None
+        for team in self.teams:
+            if team['id'] == team_id:
+                selected_team = team
+                break
+        
+        if selected_team:
+            cog = interaction.client.get_cog("TeamManagementCog")
+            if cog:
+                await cog.show_transfer_member_selection(interaction, selected_team)
+
+
+class TransferCaptainshipMemberSelectView(discord.ui.View):
+    """View for selecting member to transfer captainship to"""
+    
+    def __init__(self, team_id: int, team_name: str, current_captain_id: int, members: list, guild: discord.Guild):
+        super().__init__(timeout=None)
+        self.team_id = team_id
+        self.team_name = team_name
+        self.current_captain_id = current_captain_id
+        self.members = members
+        self.guild = guild
+        self.add_item(TransferCaptainshipMemberSelect(team_id, team_name, current_captain_id, members, guild))
+
+
+class TransferCaptainshipMemberSelect(discord.ui.Select):
+    """Dropdown for member selection"""
+    
+    def __init__(self, team_id: int, team_name: str, current_captain_id: int, members: list, guild: discord.Guild):
+        self.team_id = team_id
+        self.team_name = team_name
+        self.current_captain_id = current_captain_id
+        self.members = members
+        self.guild = guild
+        
+        options = []
+        for member in members:
+            # Get member object from guild
+            guild_member = guild.get_member(member['discord_id'])
+            if guild_member:
+                options.append(
+                    discord.SelectOption(
+                        label=guild_member.name,
+                        value=str(member['discord_id']),
+                        description=f"Role: {member['role'].title()}"
+                    )
+                )
+        
+        super().__init__(
+            placeholder="Select new captain...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.current_captain_id:
+            await interaction.response.send_message("This is not your transfer.", ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        new_captain_id = int(self.values[0])
+        new_captain = self.guild.get_member(new_captain_id)
+        
+        if not new_captain:
+            await interaction.followup.send("❌ Selected member not found!", ephemeral=True)
+            return
+        
+        try:
+            # Get team details
+            team = await db.get_team_by_id(self.team_id)
+            if not team:
+                await interaction.followup.send("❌ Team not found!", ephemeral=True)
+                return
+            
+            # Update team captain in database
+            await db.update_team(self.team_id, captain_discord_id=new_captain_id)
+            
+            # Update team_members - change old captain role to manager
+            await db.remove_team_member(self.team_id, self.current_captain_id)
+            await db.add_team_member(self.team_id, self.current_captain_id, 'manager')
+            
+            # Update new captain role in team_members
+            await db.remove_team_member(self.team_id, new_captain_id)
+            await db.add_team_member(self.team_id, new_captain_id, 'captain')
+            
+            # Success message to old captain
+            success_embed = discord.Embed(
+                title="✅ Captainship Transferred",
+                description=(
+                    f"You have successfully transferred captainship of **{self.team_name}**.\n\n"
+                    f"**New Captain:** {new_captain.mention}\n"
+                    f"**Your New Role:** Manager"
+                ),
+                color=discord.Color.green()
+            )
+            await interaction.followup.send(embed=success_embed)
+            
+            # Notify new captain
+            try:
+                new_captain_embed = discord.Embed(
+                    title="🎉 You Are Now Team Captain!",
+                    description=(
+                        f"You have been promoted to captain of **{self.team_name}** [{team['team_tag']}]!\n\n"
+                        f"**Previous Captain:** <@{self.current_captain_id}>\n\n"
+                        f"As captain, you now have full control over the team including:\n"
+                        f"• Inviting and kicking players\n"
+                        f"• Approving managers and coaches\n"
+                        f"• Transferring or disbanding the team"
+                    ),
+                    color=discord.Color.gold()
+                )
+                await new_captain.send(embed=new_captain_embed)
+            except:
+                pass  # Silently fail if can't DM
+            
+            # Log to bot logs
+            await self.log_transfer(interaction, team, new_captain)
+            
+            # Disable dropdown
+            for item in self.view.children:
+                item.disabled = True
+            await interaction.message.edit(view=self.view)
+            
+            print(f"✓ Captainship transferred from {interaction.user.name} to {new_captain.name} for team {self.team_name}")
+            
+        except Exception as e:
+            print(f"Error transferring captainship: {e}")
+            await interaction.followup.send(f"❌ Failed to transfer captainship: {e}", ephemeral=True)
+    
+    async def log_transfer(self, interaction: discord.Interaction, team: dict, new_captain: discord.Member):
+        """Log captainship transfer to bot logs channel"""
+        bot_logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+        if not bot_logs_channel_id:
+            return
+        
+        try:
+            channel = interaction.client.get_channel(int(bot_logs_channel_id))
+            if not channel:
+                return
+            
+            log_embed = discord.Embed(
+                title="Captainship Transferred",
+                description=(
+                    f"**Team**\n{team['team_name']} [{team['team_tag']}]\n\n"
+                    f"**Previous Captain**\n{interaction.user.mention} ({interaction.user.name})\n"
+                    f"→ New Role: Manager\n\n"
+                    f"**New Captain**\n{new_captain.mention} ({new_captain.name})\n\n"
+                    f"**Team ID:** {team['id']} | "
+                    f"**New Captain ID:** {new_captain.id} • "
+                    f"<t:{int(interaction.created_at.timestamp())}:f>"
+                ),
+                color=discord.Color.gold(),
+                timestamp=interaction.created_at
+            )
+            
+            await channel.send(embed=log_embed)
+            print(f"✓ Captainship transfer logged to bot logs")
+            
+        except Exception as e:
+            print(f"Error logging transfer: {e}")
 
 
 async def setup(bot):

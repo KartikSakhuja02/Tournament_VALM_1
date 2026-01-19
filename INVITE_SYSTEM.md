@@ -10,6 +10,7 @@
 | `/leave` | Any team member | Leave a team you're part of |
 | `/kick @player` | Captains, Managers | Remove a player from your team |
 | `/disband` | Captains, Managers | Permanently delete your team |
+| `/transfer-captainship` | Captains only | Transfer captainship to another member |
 
 All commands are restricted to the designated commands channel (configurable via `COMMANDS_CHANNEL_ID`).
 
@@ -106,7 +107,39 @@ All commands are restricted to the designated commands channel (configurable via
 
 ---
 
-## 4. `/disband` Command
+## 5. `/transfer-captainship` Command
+
+### Features
+- Only team captains can transfer captainship
+- Multi-team support: Choose which team if captain of multiple
+- Can transfer to players or managers only (not coaches)
+- Sends DM with dropdown of eligible members
+- Old captain automatically becomes a manager
+- New captain receives notification of promotion
+- Comprehensive logging to BOT_LOGS_CHANNEL
+
+### Flow
+1. Captain runs `/transfer-captainship`
+2. If multiple teams → dropdown to select which team
+3. Bot sends DM with list of eligible members (players/managers)
+4. Captain selects new captain from dropdown
+5. Database updated:
+   - Team captain changed to new member
+   - Old captain becomes manager
+   - New captain's role updated to captain
+6. Both captains notified
+7. Action is logged
+
+### Safety Features
+- Only captains can transfer captainship
+- Can only transfer to players or managers (not coaches)
+- Current captain cannot select themselves
+- New captain gets detailed notification of responsibilities
+- All transfers are logged for accountability
+
+---
+
+## Command Channel Restriction
 
 ### Features
 - Only captains and managers can disband teams
