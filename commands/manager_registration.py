@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import asyncio
 from database.db import db
+from utils.thread_manager import add_staff_to_thread
 
 
 class ManagerRegistrationButtons(discord.ui.View):
@@ -49,35 +50,8 @@ class ManagerRegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add administrators
-            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
-            if administrator_role_id:
-                try:
-                    admin_role = interaction.guild.get_role(int(administrator_role_id))
-                    if admin_role:
-                        for member in admin_role.members:
-                            try:
-                                await thread.add_user(member)
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                except Exception as e:
-                    print(f"Error processing administrators: {e}")
-            
-            # Add head mods
-            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
-            if headmod_role_id:
-                try:
-                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
-                    if headmod_role:
-                        for member in headmod_role.members:
-                            try:
-                                await thread.add_user(member)
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                except Exception as e:
-                    print(f"Error processing head mods: {e}")
+            # Add staff members (admins always, headmods only if online)
+            await add_staff_to_thread(thread, interaction.guild)
             
             # Send confirmation
             await interaction.followup.send(

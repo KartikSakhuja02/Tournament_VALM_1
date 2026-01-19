@@ -4,6 +4,7 @@ from discord import app_commands
 import os
 import asyncio
 from database.db import db
+from utils.thread_manager import add_staff_to_thread
 
 
 class RegistrationModal(discord.ui.Modal, title="Player Registration"):
@@ -568,35 +569,8 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             await thread.add_user(target_user)
             await thread.add_user(interaction.user)
             
-            # Add administrators
-            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
-            if administrator_role_id:
-                try:
-                    admin_role = interaction.guild.get_role(int(administrator_role_id))
-                    if admin_role:
-                        for member in admin_role.members:
-                            try:
-                                await thread.add_user(member)
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                except Exception as e:
-                    print(f"Error processing administrators: {e}")
-            
-            # Add head mods
-            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
-            if headmod_role_id:
-                try:
-                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
-                    if headmod_role:
-                        for member in headmod_role.members:
-                            try:
-                                await thread.add_user(member)
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                except Exception as e:
-                    print(f"Error processing head mods: {e}")
+            # Add staff members (admins always, headmods only if online)
+            await add_staff_to_thread(thread, interaction.guild)
             
             # Send welcome message in thread
             team_names = ", ".join([f"**{team['team_name']}**" for team in self.all_teams])
@@ -756,62 +730,28 @@ class RegistrationButtons(discord.ui.View):
             # Add user to thread
             await thread.add_user(interaction.user)
             
-            # Add administrators
-            administrator_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
-            if administrator_role_id:
-                try:
-                    admin_role = interaction.guild.get_role(int(administrator_role_id))
-                    if admin_role:
-                        print(f"Found {len(admin_role.members)} members with Administrator role")
-                        for member in admin_role.members:
-                            try:
-                                await thread.add_user(member)
-                                print(f"✓ Added Administrator: {member.name} to thread")
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                    else:
-                        print(f"Administrator role not found with ID: {administrator_role_id}")
-                except Exception as e:
-                    print(f"Error processing administrators: {e}")
-            else:
-                print("ADMINISTRATOR_ROLE_ID not set in .env")
+            # Add staff members (admins always, headmods only if online)
+            await add_staff_to_thread(thread, interaction.guild)
             
-            # Add head mods
-            headmod_role_id = os.getenv("HEADMOD_ROLE_ID")
-            if headmod_role_id:
-                try:
-                    headmod_role = interaction.guild.get_role(int(headmod_role_id))
-                    if headmod_role:
-                        print(f"Found {len(headmod_role.members)} members with Head Mod role")
-                        for member in headmod_role.members:
-                            try:
-                                await thread.add_user(member)
-                                print(f"✓ Added Head Mod: {member.name} to thread")
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                print(f"✗ Failed to add {member.name}: {e}")
-                    else:
-                        print(f"Head Mod role not found with ID: {headmod_role_id}")
-                except Exception as e:
-                    print(f"Error processing head mods: {e}")
-            else:
-                print("HEADMOD_ROLE_ID not set in .env")
-            
-            # Add staff members (if configured)
+            # Add staff members (if configured) - only if online
             staff_role_id = os.getenv("STAFF_ROLE_ID")
             if staff_role_id:
                 try:
                     staff_role = interaction.guild.get_role(int(staff_role_id))
                     if staff_role:
-                        for member in staff_role.members:
+                        online_staff = [
+                            member for member in staff_role.members
+                            if member.status != discord.Status.offline
+                        ]
+                        for member in online_staff:
                             try:
                                 await thread.add_user(member)
                                 await asyncio.sleep(0.5)
-                            except:
-                                pass
-                except:
-                    pass
+                                print(f"✓ Added online staff {member.name} to thread")
+                            except Exception as e:
+                                print(f"✗ Failed to add {member.name}: {e}")
+                except Exception as e:
+                    print(f"Error processing staff: {e}")
             
             # Send welcome message in thread
             welcome_embed = discord.Embed(

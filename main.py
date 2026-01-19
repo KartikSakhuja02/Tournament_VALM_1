@@ -10,12 +10,13 @@ load_dotenv()
 # Now import modules that depend on environment variables
 from utils import TEST_ROLE_ID
 from database.db import db
+from utils.thread_manager import on_presence_update as handle_presence_update
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # Required to check member roles
-# intents.presences = True  # Optional - for checking online status (requires privileged intent)
+intents.presences = True  # Required for checking online status
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def load_commands():
@@ -127,6 +128,11 @@ async def on_ready():
             print(f"❌ Error sending coach registration message: {e}")
     else:
         print("⚠️  COACH_REGISTRATION_CHANNEL_ID not set - skipping coach registration message")
+
+@bot.event
+async def on_presence_update(before: discord.Member, after: discord.Member):
+    """Handle presence updates - used for adding HeadMods to waiting threads"""
+    await handle_presence_update(before, after)
 
 # Run the bot
 if __name__ == "__main__":
