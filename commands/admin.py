@@ -17,28 +17,28 @@ class EditFieldSelect(discord.ui.Select):
         # Create options for each editable field
         options = [
             discord.SelectOption(
-                label="In-Game Name",
-                value="in_game_name",
-                description=f"Current: {player_data['in_game_name']}",
+                label="In-Game Name (IGN)",
+                value="ign",
+                description=f"Current: {player_data['ign']}",
                 emoji="🎮"
             ),
             discord.SelectOption(
-                label="Team Name",
-                value="team_name",
-                description=f"Current: {player_data['team_name']}",
-                emoji="👥"
+                label="Player ID",
+                value="player_id",
+                description=f"Current: {player_data['player_id']}",
+                emoji="🔢"
             ),
             discord.SelectOption(
-                label="Tracker.gg Link",
-                value="trackergg_link",
-                description=f"Current: {player_data['trackergg_link'][:50]}..." if len(player_data['trackergg_link']) > 50 else f"Current: {player_data['trackergg_link']}",
-                emoji="🔗"
+                label="Region",
+                value="region",
+                description=f"Current: {player_data['region']}",
+                emoji="🌍"
             ),
             discord.SelectOption(
-                label="Valorant Rank",
-                value="valorant_rank",
-                description=f"Current: {player_data['valorant_rank']}",
-                emoji="⭐"
+                label="Agent",
+                value="agent",
+                description=f"Current: {player_data['agent'] or 'Not set'}",
+                emoji="🎯"
             )
         ]
         
@@ -86,10 +86,10 @@ class EditValueModal(discord.ui.Modal):
         
         # Map field names to user-friendly labels
         field_labels = {
-            "in_game_name": "In-Game Name",
-            "team_name": "Team Name",
-            "trackergg_link": "Tracker.gg Link",
-            "valorant_rank": "Valorant Rank"
+            "ign": "In-Game Name (IGN)",
+            "player_id": "Player ID",
+            "region": "Region",
+            "agent": "Agent"
         }
         
         super().__init__(title=f"Edit {field_labels[field]}")
@@ -100,7 +100,7 @@ class EditValueModal(discord.ui.Modal):
             placeholder=current_value,
             default=current_value,
             required=True,
-            max_length=500 if field == "trackergg_link" else 100
+            max_length=100
         )
         self.add_item(self.new_value_input)
     
@@ -116,7 +116,7 @@ class EditValueModal(discord.ui.Modal):
         
         try:
             # Whitelist valid field names to prevent SQL injection
-            valid_fields = ["in_game_name", "team_name", "trackergg_link", "valorant_rank"]
+            valid_fields = ["ign", "player_id", "region", "agent"]
             if self.field not in valid_fields:
                 raise ValueError(f"Invalid field: {self.field}")
             
@@ -127,10 +127,10 @@ class EditValueModal(discord.ui.Modal):
             
             # Field labels for logging
             field_labels = {
-                "in_game_name": "In-Game Name",
-                "team_name": "Team Name",
-                "trackergg_link": "Tracker.gg Link",
-                "valorant_rank": "Valorant Rank"
+                "ign": "In-Game Name (IGN)",
+                "player_id": "Player ID",
+                "region": "Region",
+                "agent": "Agent"
             }
             
             # Send confirmation to admin
@@ -307,28 +307,28 @@ class Admin(commands.Cog):
             timestamp=datetime.utcnow()
         )
         info_embed.add_field(
-            name="🎮 In-Game Name",
-            value=player_dict['in_game_name'],
+            name="🎮 In-Game Name (IGN)",
+            value=player_dict['ign'],
             inline=True
         )
         info_embed.add_field(
-            name="👥 Team Name",
-            value=player_dict['team_name'],
+            name="🔢 Player ID",
+            value=player_dict['player_id'],
             inline=True
         )
         info_embed.add_field(
-            name="⭐ Rank",
-            value=player_dict['valorant_rank'],
+            name="🌍 Region",
+            value=player_dict['region'],
             inline=True
         )
         info_embed.add_field(
-            name="🔗 Tracker.gg Link",
-            value=player_dict['trackergg_link'],
-            inline=False
+            name="🎯 Agent",
+            value=player_dict['agent'] or 'Not set',
+            inline=True
         )
         info_embed.add_field(
             name="📅 Registration Date",
-            value=player_dict['registration_date'].strftime("%Y-%m-%d %H:%M UTC"),
+            value=player_dict['registered_at'].strftime("%Y-%m-%d %H:%M UTC"),
             inline=True
         )
         info_embed.set_footer(text="Select a field below to edit")
