@@ -112,12 +112,14 @@ class EditValueModal(discord.ui.Modal):
         db = bot.db
         
         try:
+            # Whitelist valid field names to prevent SQL injection
+            valid_fields = ["in_game_name", "team_name", "trackergg_link", "valorant_rank"]
+            if self.field not in valid_fields:
+                raise ValueError(f"Invalid field: {self.field}")
+            
             # Update the player's field in database
-            await db.pool.execute(
-                f"UPDATE players SET {self.field} = $1 WHERE discord_id = $2",
-                new_value,
-                str(self.target_user.id)
-            )
+            query = f"UPDATE players SET {self.field} = $1 WHERE discord_id = $2"
+            await db.pool.execute(query, new_value, str(self.target_user.id))
             
             # Field labels for logging
             field_labels = {
@@ -227,8 +229,10 @@ class EditValueModal(discord.ui.Modal):
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             
-            # Log error
-            print(f"❌ Error updating player {self.target_user.id}: {e}")
+            # Log error with full traceback
+            import traceback
+            print(f"❌ Error updating player {self.target_user.id}:")
+            print(traceback.format_exc())
 
 
 class Admin(commands.Cog):
