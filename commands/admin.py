@@ -49,6 +49,7 @@ class EditFieldSelect(discord.ui.Select):
     
     async def callback(self, interaction: discord.Interaction):
         field = self.values[0]
+        print(f"🔧 Admin editing field: {field} for user {self.target_user.id}")
         
         # Show modal for new value
         modal = EditValueModal(
@@ -58,6 +59,7 @@ class EditFieldSelect(discord.ui.Select):
             target_user=self.target_user
         )
         await interaction.response.send_modal(modal)
+        print(f"✓ Modal sent for field: {field}")
 
 
 class EditFieldView(discord.ui.View):
@@ -103,13 +105,16 @@ class EditValueModal(discord.ui.Modal):
     
     async def on_submit(self, interaction: discord.Interaction):
         new_value = self.new_value_input.value.strip()
+        print(f"📝 Modal submitted - Field: {self.field}, New value: {new_value}")
         
         # Defer the response since database operation might take time
         await interaction.response.defer(ephemeral=True)
+        print(f"✓ Modal response deferred")
         
         # Get database connection
         bot = interaction.client
         db = bot.db
+        print(f"✓ Database connection obtained")
         
         try:
             # Whitelist valid field names to prevent SQL injection
@@ -120,6 +125,7 @@ class EditValueModal(discord.ui.Modal):
             # Update the player's field in database
             query = f"UPDATE players SET {self.field} = $1 WHERE discord_id = $2"
             await db.pool.execute(query, new_value, str(self.target_user.id))
+            print(f"✓ Database updated successfully")
             
             # Field labels for logging
             field_labels = {
@@ -154,6 +160,7 @@ class EditValueModal(discord.ui.Modal):
             embed.set_footer(text=f"Edited by {interaction.user.display_name}")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Confirmation sent to admin")
             
             # Log to bot logs channel
             logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
@@ -274,6 +281,7 @@ class Admin(commands.Cog):
         
         # Defer response since we're doing database operations
         await interaction.response.defer(ephemeral=True)
+        print(f"🔍 Admin checking player: {player.id}")
         
         # Check if the target player is registered
         db = self.bot.db
