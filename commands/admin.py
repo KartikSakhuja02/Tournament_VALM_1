@@ -122,7 +122,7 @@ class EditValueModal(discord.ui.Modal):
             
             # Update the player's field in database
             query = f"UPDATE players SET {self.field} = $1 WHERE discord_id = $2"
-            await db.pool.execute(query, new_value, str(self.target_user.id))
+            await db.pool.execute(query, new_value, self.target_user.id)
             print(f"✓ Database updated successfully")
             
             # Field labels for logging
@@ -284,7 +284,7 @@ class Admin(commands.Cog):
         # Check if the target player is registered
         player_data = await db.pool.fetchrow(
             "SELECT * FROM players WHERE discord_id = $1",
-            str(player.id)
+            player.id
         )
         
         if not player_data:
