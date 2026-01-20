@@ -4,6 +4,7 @@ from discord.ext import commands
 import os
 from datetime import datetime
 from typing import Optional
+from database.db import db
 
 
 class EditFieldSelect(discord.ui.Select):
@@ -111,9 +112,6 @@ class EditValueModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
         print(f"✓ Modal response deferred")
         
-        # Get database connection
-        bot = interaction.client
-        db = bot.db
         print(f"✓ Database connection obtained")
         
         try:
@@ -165,7 +163,7 @@ class EditValueModal(discord.ui.Modal):
             # Log to bot logs channel
             logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
             if logs_channel_id:
-                logs_channel = bot.get_channel(int(logs_channel_id))
+                logs_channel = interaction.client.get_channel(int(logs_channel_id))
                 if logs_channel:
                     log_embed = discord.Embed(
                         title="🛠️ Admin: Player Registration Edited",
@@ -284,7 +282,6 @@ class Admin(commands.Cog):
         print(f"🔍 Admin checking player: {player.id}")
         
         # Check if the target player is registered
-        db = self.bot.db
         player_data = await db.pool.fetchrow(
             "SELECT * FROM players WHERE discord_id = $1",
             str(player.id)
