@@ -510,6 +510,154 @@ class Admin(commands.Cog):
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             print(f"❌ Failed to ban player {player.id}")
+    
+    @app_commands.command(
+        name="admin-unban-player",
+        description="[ADMIN] Unban a player and allow them to register again"
+    )
+    @app_commands.describe(
+        player="The player to unban"
+    )
+    async def admin_unban_player(
+        self,
+        interaction: discord.Interaction,
+        player: discord.User
+    ):
+        """Unban a player and restore their registration privileges."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command. Only administrators and bot managers can unban players.",
+                ephemeral=True
+            )
+            return
+        
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        print(f"✅ Admin unbanning player: {player.id}")
+        
+        # Check if player is actually banned
+        ban_info = await db.is_player_banned(player.id)
+        if not ban_info:
+            embed = discord.Embed(
+                title="⚠️ Player Not Banned",
+                description=f"{player.mention} is not currently banned.",
+                color=discord.Color.orange(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Unban the player
+        success = await db.unban_player(player.id)
+        
+        if success:
+            # Send confirmation to admin
+            embed = discord.Embed(
+                title="✅ Player Unbanned",
+                description=f"Successfully unbanned {player.mention}. They can now register for the tournament.",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(
+                name="Unbanned User",
+                value=f"{player.mention} (`{player.id}`)",
+                inline=True
+            )
+            embed.add_field(
+                name="Unbanned By",
+                value=interaction.user.mention,
+                inline=True
+            )
+            embed.add_field(
+                name="Originally Banned By",
+                value=f"<@{ban_info['banned_by']}>",
+                inline=True
+            )
+            if ban_info['reason']:
+                embed.add_field(
+                    name="Original Ban Reason",
+                    value=ban_info['reason'],
+                    inline=False
+                )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Player {player.id} unbanned successfully")
+            
+            # Log to bot logs channel
+            logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+            if logs_channel_id:
+                logs_channel = interaction.client.get_channel(int(logs_channel_id))
+                if logs_channel:
+                    log_embed = discord.Embed(
+                        title="✅ Admin: Player Unbanned",
+                        color=discord.Color.green(),
+                        timestamp=datetime.utcnow()
+                    )
+                    log_embed.add_field(
+                        name="Unbanned Player",
+                        value=f"{player.mention} (`{player.id}`)",
+                        inline=False
+                    )
+                    log_embed.add_field(
+                        name="Unbanned By",
+                        value=f"{interaction.user.mention} (`{interaction.user.id}`)",
+                        inline=False
+                    )
+                    log_embed.add_field(
+                        name="Originally Banned By",
+                        value=f"<@{ban_info['banned_by']}>",
+                        inline=False
+                    )
+                    if ban_info['reason']:
+                        log_embed.add_field(
+                            name="Original Ban Reason",
+                            value=ban_info['reason'],
+                            inline=False
+                        )
+                    
+                    await logs_channel.send(embed=log_embed)
+            
+            # Try to DM the player
+            try:
+                dm_embed = discord.Embed(
+                    title="✅ Tournament Ban Removed",
+                    description="Your ban from the VALORANT Mobile India Tournament has been lifted. You can now register for the tournament.",
+                    color=discord.Color.green(),
+                    timestamp=datetime.utcnow()
+                )
+                dm_embed.set_footer(text="Welcome back!")
+                
+                await player.send(embed=dm_embed)
+            except discord.Forbidden:
+                # Player has DMs disabled
+                pass
+        else:
+            # Error occurred
+            error_embed = discord.Embed(
+                title="❌ Error Unbanning Player",
+                description="Failed to unban the player. Please try again.",
+                color=discord.Color.red(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"❌ Failed to unban player {player.id}")
 
 
 async def setup(bot: commands.Bot):
