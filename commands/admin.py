@@ -347,6 +347,169 @@ class Admin(commands.Cog):
             view=view,
             ephemeral=True
         )
+    
+    @app_commands.command(
+        name="admin-ban-player",
+        description="[ADMIN] Ban a player from registering for the tournament"
+    )
+    @app_commands.describe(
+        player="The player to ban",
+        reason="Reason for the ban (optional)"
+    )
+    async def admin_ban_player(
+        self,
+        interaction: discord.Interaction,
+        player: discord.User,
+        reason: Optional[str] = None
+    ):
+        """Ban a player from tournament registration."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command. Only administrators and bot managers can ban players.",
+                ephemeral=True
+            )
+            return
+        
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        print(f"🚫 Admin banning player: {player.id}")
+        
+        # Check if player is already banned
+        ban_info = await db.is_player_banned(player.id)
+        if ban_info:
+            embed = discord.Embed(
+                title="⚠️ Player Already Banned",
+                description=f"{player.mention} is already banned from the tournament.",
+                color=discord.Color.orange(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(
+                name="Previously Banned By",
+                value=f"<@{ban_info['banned_by']}>",
+                inline=True
+            )
+            embed.add_field(
+                name="Previous Ban Date",
+                value=ban_info['banned_at'].strftime("%Y-%m-%d %H:%M UTC"),
+                inline=True
+            )
+            if ban_info['reason']:
+                embed.add_field(
+                    name="Previous Reason",
+                    value=ban_info['reason'],
+                    inline=False
+                )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Ban the player
+        success = await db.ban_player(player.id, interaction.user.id, reason)
+        
+        if success:
+            # Send confirmation to admin
+            embed = discord.Embed(
+                title="🚫 Player Banned",
+                description=f"Successfully banned {player.mention} from tournament registration.",
+                color=discord.Color.red(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(
+                name="Banned User",
+                value=f"{player.mention} (`{player.id}`)",
+                inline=True
+            )
+            embed.add_field(
+                name="Banned By",
+                value=interaction.user.mention,
+                inline=True
+            )
+            if reason:
+                embed.add_field(
+                    name="Reason",
+                    value=reason,
+                    inline=False
+                )
+            embed.set_footer(text="This player cannot register as player or team")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Player {player.id} banned successfully")
+            
+            # Log to bot logs channel
+            logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+            if logs_channel_id:
+                logs_channel = interaction.client.get_channel(int(logs_channel_id))
+                if logs_channel:
+                    log_embed = discord.Embed(
+                        title="🚫 Admin: Player Banned",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    log_embed.add_field(
+                        name="Banned Player",
+                        value=f"{player.mention} (`{player.id}`)",
+                        inline=False
+                    )
+                    log_embed.add_field(
+                        name="Banned By",
+                        value=f"{interaction.user.mention} (`{interaction.user.id}`)",
+                        inline=False
+                    )
+                    if reason:
+                        log_embed.add_field(
+                            name="Reason",
+                            value=reason,
+                            inline=False
+                        )
+                    
+                    await logs_channel.send(embed=log_embed)
+            
+            # Try to DM the player
+            try:
+                dm_embed = discord.Embed(
+                    title="🚫 Tournament Ban",
+                    description="You have been banned from participating in the VALORANT Mobile India Tournament.",
+                    color=discord.Color.red(),
+                    timestamp=datetime.utcnow()
+                )
+                if reason:
+                    dm_embed.add_field(
+                        name="Reason",
+                        value=reason,
+                        inline=False
+                    )
+                dm_embed.set_footer(text="If you believe this is an error, please contact the tournament administrators.")
+                
+                await player.send(embed=dm_embed)
+            except discord.Forbidden:
+                # Player has DMs disabled
+                pass
+        else:
+            # Error occurred
+            error_embed = discord.Embed(
+                title="❌ Error Banning Player",
+                description="Failed to ban the player. Please try again.",
+                color=discord.Color.red(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"❌ Failed to ban player {player.id}")
 
 
 async def setup(bot: commands.Bot):

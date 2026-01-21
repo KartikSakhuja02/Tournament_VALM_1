@@ -388,6 +388,50 @@ class Database:
                 team_id
             )
             return result == "DELETE 1"
+    
+    # Ban operations
+    
+    async def ban_player(self, discord_id: int, banned_by: int, reason: str = None) -> bool:
+        """Ban a player from registering"""
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO banned_players (discord_id, banned_by, reason, banned_at)
+                    VALUES ($1, $2, $3, NOW())
+                    ON CONFLICT (discord_id) DO UPDATE
+                    SET banned_by = $2, reason = $3, banned_at = NOW()
+                    """,
+                    discord_id, banned_by, reason
+                )
+                return True
+            except Exception as e:
+                print(f"❌ Error banning player: {e}")
+                return False
+    
+    async def unban_player(self, discord_id: int) -> bool:
+        """Unban a player"""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM banned_players WHERE discord_id = $1",
+                discord_id
+            )
+            return result == "DELETE 1"
+    
+    async def is_player_banned(self, discord_id: int) -> Optional[Dict]:
+        """Check if a player is banned"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM banned_players WHERE discord_id = $1",
+                discord_id
+            )
+            return dict(row) if row else None
+    
+    async def get_all_banned_players(self) -> List[Dict]:
+        """Get all banned players"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM banned_players ORDER BY banned_at DESC")
+            return [dict(row) for row in rows]
 
 
 # Global database instance
