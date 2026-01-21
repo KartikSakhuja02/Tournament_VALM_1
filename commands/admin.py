@@ -260,19 +260,25 @@ class Admin(commands.Cog):
     ):
         """Edit a registered player's details."""
         
-        # Check if user has administrator role
+        # Check if user has administrator role or bots role
         admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
-        if not admin_role_id:
-            await interaction.response.send_message(
-                "❌ Administrator role is not configured.",
-                ephemeral=True
-            )
-            return
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
         
-        admin_role = interaction.guild.get_role(int(admin_role_id))
-        if not admin_role or admin_role not in interaction.user.roles:
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
             await interaction.response.send_message(
-                "❌ You don't have permission to use this command. Only administrators can edit player registrations.",
+                "❌ You don't have permission to use this command. Only administrators and bot managers can edit player registrations.",
                 ephemeral=True
             )
             return
