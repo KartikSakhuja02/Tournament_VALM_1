@@ -721,6 +721,235 @@ class Admin(commands.Cog):
         view = DeleteTeamView(all_teams, interaction.user)
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    
+    @app_commands.command(
+        name="admin-delete-player",
+        description="[ADMIN] Permanently delete a player's registration"
+    )
+    @app_commands.describe(
+        player="The player to delete"
+    )
+    async def admin_delete_player(
+        self,
+        interaction: discord.Interaction,
+        player: discord.User
+    ):
+        """Delete a player's registration from the tournament."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command. Only administrators and bot managers can delete players.",
+                ephemeral=True
+            )
+            return
+        
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        print(f"🗑️ Admin deleting player: {player.id}")
+        
+        # Check if the player is registered
+        player_data = await db.pool.fetchrow(
+            "SELECT * FROM players WHERE discord_id = $1",
+            player.id
+        )
+        
+        if not player_data:
+            embed = discord.Embed(
+                title="❌ Player Not Found",
+                description=f"{player.mention} is not registered for the tournament.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Convert to dict
+        player_dict = dict(player_data)
+        
+        # Show confirmation view
+        confirm_view = DeletePlayerConfirmView(player, player_dict, interaction.user)
+        
+        embed = discord.Embed(
+            title="⚠️ Confirm Player Deletion",
+            description=f"Are you sure you want to permanently delete {player.mention}'s registration?",
+            color=discord.Color.red(),
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(
+            name="🎮 In-Game Name (IGN)",
+            value=player_dict['ign'],
+            inline=True
+        )
+        embed.add_field(
+            name="🔢 Player ID",
+            value=player_dict['player_id'],
+            inline=True
+        )
+        embed.add_field(
+            name="🌍 Region",
+            value=player_dict['region'],
+            inline=True
+        )
+        embed.add_field(
+            name="🎯 Agent",
+            value=player_dict['agent'] or 'Not set',
+            inline=True
+        )
+        embed.add_field(
+            name="📅 Registration Date",
+            value=player_dict['registered_at'].strftime("%Y-%m-%d %H:%M UTC"),
+            inline=True
+        )
+        embed.add_field(
+            name="Discord ID",
+            value=str(player.id),
+            inline=True
+        )
+        embed.set_footer(text="⚠️ This action cannot be undone!")
+        
+        await interaction.followup.send(embed=embed, view=confirm_view, ephemeral=True)
+
+
+class DeletePlayerConfirmView(discord.ui.View):
+    """Confirmation view for player deletion."""
+    
+    def __init__(self, player: discord.User, player_data: dict, admin_user: discord.User):
+        super().__init__(timeout=60)
+        self.player = player
+        self.player_data = player_data
+        self.admin_user = admin_user
+    
+    @discord.ui.button(label="Confirm Delete", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        
+        # Delete the player
+        success = await db.delete_player(self.player.id)
+        
+        if success:
+            # Send confirmation
+            embed = discord.Embed(
+                title="✅ Player Deleted",
+                description=f"Successfully deleted {self.player.mention}'s registration.",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(
+                name="Player",
+                value=f"{self.player.mention} (`{self.player.id}`)",
+                inline=True
+            )
+            embed.add_field(
+                name="Deleted By",
+                value=self.admin_user.mention,
+                inline=True
+            )
+            embed.add_field(
+                name="IGN",
+                value=self.player_data['ign'],
+                inline=True
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Player {self.player.id} deleted by admin {self.admin_user.id}")
+            
+            # Log to bot logs channel
+            logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+            if logs_channel_id:
+                logs_channel = interaction.client.get_channel(int(logs_channel_id))
+                if logs_channel:
+                    log_embed = discord.Embed(
+                        title="🗑️ Admin: Player Registration Deleted",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    log_embed.add_field(
+                        name="Player",
+                        value=f"{self.player.mention} (`{self.player.id}`)",
+                        inline=False
+                    )
+                    log_embed.add_field(
+                        name="IGN",
+                        value=self.player_data['ign'],
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Player ID",
+                        value=self.player_data['player_id'],
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Region",
+                        value=self.player_data['region'],
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Deleted By",
+                        value=f"{self.admin_user.mention} (`{self.admin_user.id}`)",
+                        inline=False
+                    )
+                    
+                    await logs_channel.send(embed=log_embed)
+            
+            # Try to DM the player
+            try:
+                dm_embed = discord.Embed(
+                    title="🗑️ Registration Deleted",
+                    description="Your tournament registration has been deleted by tournament administrators.",
+                    color=discord.Color.red(),
+                    timestamp=datetime.utcnow()
+                )
+                dm_embed.add_field(
+                    name="Your IGN",
+                    value=self.player_data['ign'],
+                    inline=True
+                )
+                dm_embed.add_field(
+                    name="Region",
+                    value=self.player_data['region'],
+                    inline=True
+                )
+                dm_embed.set_footer(text="Contact tournament administrators if you have questions.")
+                
+                await self.player.send(embed=dm_embed)
+            except discord.Forbidden:
+                # Player has DMs disabled
+                pass
+        else:
+            error_embed = discord.Embed(
+                title="❌ Error Deleting Player",
+                description="Failed to delete the player registration. Please try again.",
+                color=discord.Color.red(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"❌ Failed to delete player {self.player.id}")
+    
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="✖️")
+    async def cancel_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="✖️ Deletion Cancelled",
+            description="Player deletion has been cancelled.",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
 
 
 class DeleteTeamView(discord.ui.View):
