@@ -1047,7 +1047,184 @@ class EditTeamFieldSelect(discord.ui.Select):
         field = self.values[0]
         print(f"🔧 Admin editing team field: {field} for team {self.team_data['id']}")
         
-        # Show modal for new value
+        # Special handling for logo_url - ask for image upload
+        if field == "logo_url":
+            await interaction.response.defer(ephemeral=True)
+            
+            embed = discord.Embed(
+                title="📸 Upload Team Logo",
+                description=(
+                    f"Editing logo for: **{self.team_data['team_name']}**\n\n"
+                    "Please upload the team logo image in this channel.\n\n"
+                    "**Requirements:**\n"
+                    "• Must be an image file (PNG, JPG, JPEG, GIF)\n"
+                    "• Recommended size: 512x512 pixels\n"
+                    "• Maximum file size: 8MB\n\n"
+                    "The image will be saved and your message will be deleted.\n"
+                    "⏱️ You have 60 seconds to upload."
+                ),
+                color=discord.Color.blue(),
+                timestamp=datetime.utcnow()
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+            # Wait for image upload
+            def check(m):
+                return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.attachments) > 0
+            
+            try:
+                import aiohttp
+                from pathlib import Path
+                
+                bot = interaction.client
+                message = await bot.wait_for('message', timeout=60.0, check=check)
+                
+                # Get the first attachment
+                attachment = message.attachments[0]
+                
+                # Validate it's an image
+                valid_extensions = ['.png', '.jpg', '.jpeg', '.gif']
+                file_ext = Path(attachment.filename).suffix.lower()
+                
+                if file_ext not in valid_extensions:
+                    await interaction.followup.send(
+                        "❌ Please upload a valid image file (PNG, JPG, JPEG, or GIF).",
+                        ephemeral=True
+                    )
+                    await message.delete()
+                    return
+                
+                # Create team_logos directory if it doesn't exist
+                logos_dir = Path("team_logos")
+                logos_dir.mkdir(exist_ok=True)
+                
+                # Generate filename: teamid_timestamp.ext
+                import time
+                timestamp = int(time.time())
+                filename = f"team_{self.team_data['id']}_{timestamp}{file_ext}"
+                filepath = logos_dir / filename
+                
+                # Download and save the image
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as resp:
+                        if resp.status == 200:
+                            with open(filepath, 'wb') as f:
+                                f.write(await resp.read())
+                
+                # Update database with local file path
+                logo_path = str(filepath)
+                query = "UPDATE teams SET logo_url = $1, updated_at = NOW() WHERE id = $2"
+                await db.pool.execute(query, logo_path, self.team_data['id'])
+                
+                # Delete the user's message with the image
+                await message.delete()
+                
+                print(f"✓ Team logo saved to {logo_path}")
+                
+                # Send confirmation
+                confirm_embed = discord.Embed(
+                    title="✅ Team Logo Updated Successfully",
+                    description=f"Updated logo for **{self.team_data['team_name']}**",
+                    color=discord.Color.green(),
+                    timestamp=datetime.utcnow()
+                )
+                confirm_embed.add_field(
+                    name="Field",
+                    value="Team Logo",
+                    inline=True
+                )
+                confirm_embed.add_field(
+                    name="Old Logo",
+                    value=self.team_data['logo_url'] or 'Not set',
+                    inline=False
+                )
+                confirm_embed.add_field(
+                    name="New Logo Path",
+                    value=logo_path,
+                    inline=False
+                )
+                confirm_embed.set_footer(text=f"Edited by {interaction.user.display_name}")
+                confirm_embed.set_thumbnail(url=f"attachment://{filename}")
+                
+                # Send with the image as attachment
+                await interaction.followup.send(
+                    embed=confirm_embed,
+                    file=discord.File(filepath, filename=filename),
+                    ephemeral=True
+                )
+                
+                # Log to bot logs channel
+                logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+                if logs_channel_id:
+                    logs_channel = interaction.client.get_channel(int(logs_channel_id))
+                    if logs_channel:
+                        log_embed = discord.Embed(
+                            title="🛠️ Admin: Team Logo Updated",
+                            color=discord.Color.orange(),
+                            timestamp=datetime.utcnow()
+                        )
+                        log_embed.add_field(
+                            name="Team",
+                            value=f"**{self.team_data['team_name']}** (ID: {self.team_data['id']})",
+                            inline=False
+                        )
+                        log_embed.add_field(
+                            name="Old Logo",
+                            value=self.team_data['logo_url'] or 'Not set',
+                            inline=False
+                        )
+                        log_embed.add_field(
+                            name="New Logo Path",
+                            value=logo_path,
+                            inline=False
+                        )
+                        log_embed.set_footer(text=f"Admin: {interaction.user.display_name} ({interaction.user.id})")
+                        log_embed.set_thumbnail(url=f"attachment://{filename}")
+                        
+                        await logs_channel.send(
+                            embed=log_embed,
+                            file=discord.File(filepath, filename=filename)
+                        )
+                
+                # Notify team members
+                members = await db.get_team_members(self.team_data['id'])
+                for member in members:
+                    try:
+                        user = await interaction.client.fetch_user(member['discord_id'])
+                        dm_embed = discord.Embed(
+                            title="📝 Team Logo Updated",
+                            description=f"Your team **{self.team_data['team_name']}** logo has been updated by an administrator.",
+                            color=discord.Color.blue(),
+                            timestamp=datetime.utcnow()
+                        )
+                        dm_embed.set_thumbnail(url=f"attachment://{filename}")
+                        dm_embed.set_footer(text="If you believe this was done in error, please contact an administrator.")
+                        
+                        await user.send(embed=dm_embed, file=discord.File(filepath, filename=filename))
+                    except (discord.Forbidden, discord.NotFound):
+                        pass
+                
+            except asyncio.TimeoutError:
+                await interaction.followup.send(
+                    "❌ Timeout: No image uploaded within 60 seconds.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                import traceback
+                error_embed = discord.Embed(
+                    title="❌ Error Uploading Logo",
+                    description=f"Failed to upload team logo: {str(e)}",
+                    color=discord.Color.red(),
+                    timestamp=datetime.utcnow()
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                print(f"❌ Error uploading team logo:")
+                print(traceback.format_exc())
+            
+            return
+        
+        # For other fields, show modal as usual
         modal = EditTeamValueModal(
             field=field,
             current_value=self.team_data[field] or "",
