@@ -28,6 +28,24 @@ class RegistrationModal(discord.ui.Modal, title="Player Registration"):
     
     async def on_submit(self, interaction: discord.Interaction):
         """Handle form submission - show region selector"""
+        # Check if user is banned
+        ban_info = await db.is_player_banned(interaction.user.id)
+        if ban_info:
+            embed = discord.Embed(
+                title="🚫 Registration Blocked",
+                description="You are banned from participating in this tournament.",
+                color=discord.Color.red()
+            )
+            if ban_info['reason']:
+                embed.add_field(
+                    name="Reason",
+                    value=ban_info['reason'],
+                    inline=False
+                )
+            embed.set_footer(text="Contact tournament administrators if you believe this is an error.")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         await interaction.response.defer()
         
         # Create region selection view

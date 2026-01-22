@@ -22,6 +22,24 @@ class TeamRoleSelectView(discord.ui.View):
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
         
+        # Check if user is banned
+        ban_info = await db.is_player_banned(interaction.user.id)
+        if ban_info:
+            embed = discord.Embed(
+                title="🚫 Registration Blocked",
+                description="You are banned from participating in this tournament.",
+                color=discord.Color.red()
+            )
+            if ban_info['reason']:
+                embed.add_field(
+                    name="Reason",
+                    value=ban_info['reason'],
+                    inline=False
+                )
+            embed.set_footer(text="Contact tournament administrators if you believe this is an error.")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         # Show team name modal with captain role
         modal = TeamNameModal(user_role='captain')
         await interaction.response.send_modal(modal)
@@ -31,6 +49,24 @@ class TeamRoleSelectView(discord.ui.View):
         """User selects manager role"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
+            return
+        
+        # Check if user is banned
+        ban_info = await db.is_player_banned(interaction.user.id)
+        if ban_info:
+            embed = discord.Embed(
+                title="🚫 Registration Blocked",
+                description="You are banned from participating in this tournament.",
+                color=discord.Color.red()
+            )
+            if ban_info['reason']:
+                embed.add_field(
+                    name="Reason",
+                    value=ban_info['reason'],
+                    inline=False
+                )
+            embed.set_footer(text="Contact tournament administrators if you believe this is an error.")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
         # Show team name modal with manager role

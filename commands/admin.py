@@ -658,6 +658,282 @@ class Admin(commands.Cog):
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             print(f"❌ Failed to unban player {player.id}")
+    
+    @app_commands.command(
+        name="admin-delete-team",
+        description="[ADMIN] Permanently delete a team from the tournament"
+    )
+    async def admin_delete_team(
+        self,
+        interaction: discord.Interaction
+    ):
+        """Delete a team from the tournament."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command. Only administrators and bot managers can delete teams.",
+                ephemeral=True
+            )
+            return
+        
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        print(f"🗑️ Admin deleting team")
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            embed = discord.Embed(
+                title="⚠️ No Teams Found",
+                description="There are no teams registered in the tournament.",
+                color=discord.Color.orange(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Show team selection dropdown
+        embed = discord.Embed(
+            title="🗑️ Delete Team",
+            description="Select a team to permanently delete from the tournament.",
+            color=discord.Color.red(),
+            timestamp=datetime.utcnow()
+        )
+        embed.set_footer(text="⚠️ This action cannot be undone!")
+        
+        view = DeleteTeamView(all_teams, interaction.user)
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+
+class DeleteTeamView(discord.ui.View):
+    """View with team selection dropdown for deletion."""
+    
+    def __init__(self, teams: list, admin_user: discord.User):
+        super().__init__(timeout=300)
+        self.teams = teams
+        self.admin_user = admin_user
+        self.add_item(DeleteTeamSelect(teams, admin_user))
+
+
+class DeleteTeamSelect(discord.ui.Select):
+    """Dropdown for selecting team to delete."""
+    
+    def __init__(self, teams: list, admin_user: discord.User):
+        self.teams = teams
+        self.admin_user = admin_user
+        
+        # Create options from teams
+        options = []
+        for team in teams[:25]:  # Discord limit of 25 options
+            options.append(
+                discord.SelectOption(
+                    label=team['team_name'],
+                    value=str(team['id']),
+                    description=f"Tag: {team['team_tag']} | ID: {team['id']}",
+                    emoji="👥"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select a team to delete...",
+            options=options,
+            custom_id="delete_team_select"
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        team_id = int(self.values[0])
+        
+        # Find the selected team
+        selected_team = next((t for t in self.teams if t['id'] == team_id), None)
+        
+        if not selected_team:
+            await interaction.response.send_message(
+                "❌ Team not found.",
+                ephemeral=True
+            )
+            return
+        
+        # Show confirmation view
+        confirm_view = DeleteTeamConfirmView(selected_team, self.admin_user)
+        
+        # Get team members
+        members = await db.get_team_members(team_id)
+        member_list = "\n".join([f"• <@{m['discord_id']}> ({m['role']})" for m in members[:10]])
+        if len(members) > 10:
+            member_list += f"\n...and {len(members) - 10} more"
+        
+        embed = discord.Embed(
+            title="⚠️ Confirm Team Deletion",
+            description=f"Are you sure you want to permanently delete **{selected_team['team_name']}**?",
+            color=discord.Color.red(),
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(
+            name="Team Tag",
+            value=selected_team['team_tag'],
+            inline=True
+        )
+        embed.add_field(
+            name="Team ID",
+            value=str(team_id),
+            inline=True
+        )
+        embed.add_field(
+            name="Member Count",
+            value=str(len(members)),
+            inline=True
+        )
+        if members:
+            embed.add_field(
+                name="Team Members",
+                value=member_list,
+                inline=False
+            )
+        embed.set_footer(text="⚠️ This action cannot be undone! All team members will be notified.")
+        
+        await interaction.response.edit_message(embed=embed, view=confirm_view)
+
+
+class DeleteTeamConfirmView(discord.ui.View):
+    """Confirmation view for team deletion."""
+    
+    def __init__(self, team: dict, admin_user: discord.User):
+        super().__init__(timeout=60)
+        self.team = team
+        self.admin_user = admin_user
+    
+    @discord.ui.button(label="Confirm Delete", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        
+        team_id = self.team['id']
+        team_name = self.team['team_name']
+        
+        # Get team members before deletion
+        members = await db.get_team_members(team_id)
+        
+        # Delete the team (cascade deletes team_members)
+        success = await db.delete_team(team_id)
+        
+        if success:
+            # Send confirmation
+            embed = discord.Embed(
+                title="✅ Team Deleted",
+                description=f"Successfully deleted **{team_name}**.",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(
+                name="Deleted By",
+                value=self.admin_user.mention,
+                inline=True
+            )
+            embed.add_field(
+                name="Members Removed",
+                value=str(len(members)),
+                inline=True
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Team {team_id} ({team_name}) deleted by admin {self.admin_user.id}")
+            
+            # Log to bot logs channel
+            logs_channel_id = os.getenv("BOT_LOGS_CHANNEL_ID")
+            if logs_channel_id:
+                logs_channel = interaction.client.get_channel(int(logs_channel_id))
+                if logs_channel:
+                    log_embed = discord.Embed(
+                        title="🗑️ Admin: Team Deleted",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    log_embed.add_field(
+                        name="Team Name",
+                        value=team_name,
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Team Tag",
+                        value=self.team['team_tag'],
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Team ID",
+                        value=str(team_id),
+                        inline=True
+                    )
+                    log_embed.add_field(
+                        name="Deleted By",
+                        value=f"{self.admin_user.mention} (`{self.admin_user.id}`)",
+                        inline=False
+                    )
+                    log_embed.add_field(
+                        name="Members Affected",
+                        value=str(len(members)),
+                        inline=True
+                    )
+                    
+                    await logs_channel.send(embed=log_embed)
+            
+            # Notify all team members via DM
+            for member in members:
+                try:
+                    user = await interaction.client.fetch_user(member['discord_id'])
+                    dm_embed = discord.Embed(
+                        title="👥 Team Deleted",
+                        description=f"Your team **{team_name}** has been deleted by tournament administrators.",
+                        color=discord.Color.red(),
+                        timestamp=datetime.utcnow()
+                    )
+                    dm_embed.add_field(
+                        name="Your Role",
+                        value=member['role'].title(),
+                        inline=True
+                    )
+                    dm_embed.set_footer(text="Contact tournament administrators if you have questions.")
+                    
+                    await user.send(embed=dm_embed)
+                except (discord.Forbidden, discord.NotFound):
+                    # User has DMs disabled or not found
+                    pass
+        else:
+            error_embed = discord.Embed(
+                title="❌ Error Deleting Team",
+                description="Failed to delete the team. Please try again.",
+                color=discord.Color.red(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"❌ Failed to delete team {team_id}")
+    
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="✖️")
+    async def cancel_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="✖️ Deletion Cancelled",
+            description="Team deletion has been cancelled.",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
 
 
 async def setup(bot: commands.Bot):
