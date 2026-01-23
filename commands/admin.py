@@ -885,6 +885,68 @@ class Admin(commands.Cog):
         view = EditTeamSelectView(all_teams)
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    
+    @app_commands.command(
+        name="admin-transfer-captain",
+        description="[ADMIN] Transfer team captainship to another team member"
+    )
+    async def admin_transfer_captain(
+        self,
+        interaction: discord.Interaction
+    ):
+        """Transfer captainship of a team to another member."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command. Only administrators and bot managers can transfer captainship.",
+                ephemeral=True
+            )
+            return
+        
+        # Defer response
+        await interaction.response.defer(ephemeral=True)
+        print(f"👑 Admin transferring captainship")
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            embed = discord.Embed(
+                title="⚠️ No Teams Found",
+                description="There are no teams registered in the tournament.",
+                color=discord.Color.orange(),
+                timestamp=datetime.utcnow()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Show team selection dropdown
+        embed = discord.Embed(
+            title="👑 Transfer Team Captainship",
+            description="Select a team to transfer captainship.",
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow()
+        )
+        
+        view = AdminTransferCaptainTeamView(all_teams, interaction.user)
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 class EditTeamSelectView(discord.ui.View):
@@ -1402,68 +1464,6 @@ class EditTeamValueModal(discord.ui.Modal):
             import traceback
             print(f"❌ Error updating team {self.team_data['id']}:")
             print(traceback.format_exc())
-    
-    @app_commands.command(
-        name="admin-transfer-captain",
-        description="[ADMIN] Transfer team captainship to another team member"
-    )
-    async def admin_transfer_captain(
-        self,
-        interaction: discord.Interaction
-    ):
-        """Transfer captainship of a team to another member."""
-        
-        # Check if user has administrator role or bots role
-        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
-        bots_role_id = os.getenv("BOTS_ROLE_ID")
-        
-        has_permission = False
-        
-        if admin_role_id:
-            admin_role = interaction.guild.get_role(int(admin_role_id))
-            if admin_role and admin_role in interaction.user.roles:
-                has_permission = True
-        
-        if not has_permission and bots_role_id:
-            bots_role = interaction.guild.get_role(int(bots_role_id))
-            if bots_role and bots_role in interaction.user.roles:
-                has_permission = True
-        
-        if not has_permission:
-            await interaction.response.send_message(
-                "❌ You don't have permission to use this command. Only administrators and bot managers can transfer captainship.",
-                ephemeral=True
-            )
-            return
-        
-        # Defer response
-        await interaction.response.defer(ephemeral=True)
-        print(f"👑 Admin transferring captainship")
-        
-        # Get all teams
-        all_teams = await db.get_all_teams()
-        
-        if not all_teams:
-            embed = discord.Embed(
-                title="⚠️ No Teams Found",
-                description="There are no teams registered in the tournament.",
-                color=discord.Color.orange(),
-                timestamp=datetime.utcnow()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-        
-        # Show team selection dropdown
-        embed = discord.Embed(
-            title="👑 Transfer Team Captainship",
-            description="Select a team to transfer captainship.",
-            color=discord.Color.gold(),
-            timestamp=datetime.utcnow()
-        )
-        
-        view = AdminTransferCaptainTeamView(all_teams, interaction.user)
-        
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 class AdminTransferCaptainTeamView(discord.ui.View):
