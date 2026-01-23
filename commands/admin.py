@@ -1544,6 +1544,10 @@ class AdminTransferCaptainTeamSelect(discord.ui.Select):
         
         view = AdminTransferCaptainMemberView(selected_team, members, self.admin_user)
         
+        # Populate the dropdown with member names
+        select_item = view.children[0]
+        await select_item.populate_options(interaction.client)
+        
         await interaction.response.edit_message(embed=embed, view=view)
 
 
@@ -1566,15 +1570,49 @@ class AdminTransferCaptainMemberSelect(discord.ui.Select):
         self.members = members
         self.admin_user = admin_user
         
-        # Create options from members
+        # Create options from members - will be populated in callback after fetching names
+        options = [
+            discord.SelectOption(
+                label="Loading members...",
+                value="0",
+                emoji="⏳"
+            )
+        ]
+        
+        super().__init__(
+            placeholder="Select new captain...",
+            options=options,
+            custom_id="admin_transfer_captain_member_select"
+        )
+    
+    async def populate_options(self, bot):
+        """Populate dropdown options with member names."""
         options = []
-        for member in members[:25]:  # Discord limit of 25 options
+        
+        for member in self.members[:25]:  # Discord limit of 25 options
+            # Try to get player name from database
+            player_data = await db.pool.fetchrow(
+                "SELECT ign FROM players WHERE discord_id = $1",
+                member['discord_id']
+            )
+            
             # Show role and mark current captain
             role_display = member['role'].title()
-            if member['discord_id'] == team['captain_discord_id']:
-                label = f"👑 {member['discord_id']} (Current Captain)"
+            
+            if player_data and player_data['ign']:
+                member_name = player_data['ign']
             else:
-                label = f"{member['discord_id']}"
+                # Fallback to Discord username if not in database
+                try:
+                    user = await bot.fetch_user(member['discord_id'])
+                    member_name = user.name
+                except:
+                    member_name = str(member['discord_id'])
+            
+            if member['discord_id'] == self.team['captain_discord_id']:
+                label = f"👑 {member_name} (Current Captain)"
+            else:
+                label = f"{member_name}"
             
             options.append(
                 discord.SelectOption(
@@ -1585,11 +1623,7 @@ class AdminTransferCaptainMemberSelect(discord.ui.Select):
                 )
             )
         
-        super().__init__(
-            placeholder="Select new captain...",
-            options=options,
-            custom_id="admin_transfer_captain_member_select"
-        )
+        self.options = options
     
     async def callback(self, interaction: discord.Interaction):
         new_captain_id = int(self.values[0])
