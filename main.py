@@ -28,7 +28,8 @@ async def load_commands():
         "commands.manager_registration",
         "commands.coach_registration",
         "commands.team_management",
-        "commands.admin"
+        "commands.admin",
+        "commands.profile"
     ]
     
     for command in commands_to_load:

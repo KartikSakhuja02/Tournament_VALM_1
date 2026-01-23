@@ -432,6 +432,33 @@ class Database:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM banned_players ORDER BY banned_at DESC")
             return [dict(row) for row in rows]
+    
+    async def get_player_profile(self, discord_id: int) -> Optional[Dict]:
+        """Get player profile with stats (joins players and player_stats)"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 
+                    p.discord_id,
+                    p.ign,
+                    p.player_id,
+                    p.region,
+                    p.registered_at,
+                    COALESCE(ps.kills, 0) as kills,
+                    COALESCE(ps.deaths, 0) as deaths,
+                    COALESCE(ps.assists, 0) as assists,
+                    COALESCE(ps.matches_played, 0) as matches_played,
+                    COALESCE(ps.wins, 0) as wins,
+                    COALESCE(ps.losses, 0) as losses,
+                    COALESCE(ps.mvps, 0) as mvps,
+                    COALESCE(ps.points, 0) as points
+                FROM players p
+                LEFT JOIN player_stats ps ON p.discord_id = ps.discord_id
+                WHERE p.discord_id = $1
+                """,
+                discord_id
+            )
+            return dict(row) if row else None
 
 
 # Global database instance
