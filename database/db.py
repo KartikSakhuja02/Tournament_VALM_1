@@ -459,6 +459,77 @@ class Database:
                 discord_id
             )
             return dict(row) if row else None
+    
+    async def get_team_profile(self, team_id: int) -> Optional[Dict]:
+        """Get team profile with members and stats"""
+        async with self.pool.acquire() as conn:
+            # Get team basic info with stats
+            team_row = await conn.fetchrow(
+                """
+                SELECT 
+                    t.id,
+                    t.team_name,
+                    t.team_tag,
+                    t.captain_discord_id,
+                    t.region,
+                    t.logo_url,
+                    t.created_at,
+                    COALESCE(ts.wins, 0) as wins,
+                    COALESCE(ts.losses, 0) as losses,
+                    COALESCE(ts.matches_played, 0) as matches_played
+                FROM teams t
+                LEFT JOIN team_stats ts ON t.id = ts.team_id
+                WHERE t.id = $1
+                """,
+                team_id
+            )
+            
+            if not team_row:
+                return None
+            
+            team = dict(team_row)
+            
+            # Get all team members with player info
+            members_rows = await conn.fetch(
+                """
+                SELECT 
+                    tm.discord_id,
+                    tm.role,
+                    tm.joined_at,
+                    p.ign,
+                    p.player_id
+                FROM team_members tm
+                LEFT JOIN players p ON tm.discord_id = p.discord_id
+                WHERE tm.team_id = $1
+                ORDER BY 
+                    CASE tm.role
+                        WHEN 'captain' THEN 1
+                        WHEN 'manager' THEN 2
+                        WHEN 'player' THEN 3
+                        WHEN 'coach' THEN 4
+                    END
+                """,
+                team_id
+            )
+            
+            # Organize members by role
+            team['captain'] = None
+            team['managers'] = []
+            team['players'] = []
+            team['coach'] = None
+            
+            for member in members_rows:
+                member_dict = dict(member)
+                if member_dict['role'] == 'captain':
+                    team['captain'] = member_dict
+                elif member_dict['role'] == 'manager':
+                    team['managers'].append(member_dict)
+                elif member_dict['role'] == 'player':
+                    team['players'].append(member_dict)
+                elif member_dict['role'] == 'coach':
+                    team['coach'] = member_dict
+            
+            return team
 
 
 # Global database instance
