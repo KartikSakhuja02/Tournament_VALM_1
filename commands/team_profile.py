@@ -16,23 +16,70 @@ class TeamProfile(commands.Cog):
         self.bot = bot
     
     @app_commands.command(name="team-profile", description="View a team's profile")
-    @app_commands.describe(team_name="The name of the team to view")
-    async def team_profile(self, interaction: discord.Interaction, team_name: str):
+    @app_commands.describe(
+        user="View this user's team profile",
+        team_name="View team by name"
+    )
+    async def team_profile(
+        self, 
+        interaction: discord.Interaction, 
+        user: discord.User = None,
+        team_name: str = None
+    ):
         """View team profile with stats"""
         await interaction.response.defer(ephemeral=True)
         
         try:
-            # Get team by name
-            team_data = await db.get_team_by_name(team_name)
+            team_data = None
             
-            if not team_data:
-                embed = discord.Embed(
-                    title="❌ Team Not Found",
-                    description=f"No team found with the name `{team_name}`.",
-                    color=discord.Color.red()
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                return
+            # Determine which team to show
+            if team_name:
+                # Search by team name
+                team_data = await db.get_team_by_name(team_name)
+                if not team_data:
+                    embed = discord.Embed(
+                        title="❌ Team Not Found",
+                        description=f"No team found with the name `{team_name}`.",
+                        color=discord.Color.red()
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
+            elif user:
+                # Get the mentioned user's team (any role)
+                target_id = user.id
+                # Check all roles to find their team
+                for role in ['captain', 'player', 'manager', 'coach']:
+                    teams = await db.get_user_teams_by_role(target_id, role)
+                    if teams:
+                        team_data = teams[0]  # Get first team
+                        break
+                
+                if not team_data:
+                    embed = discord.Embed(
+                        title="❌ No Team Found",
+                        description=f"{user.mention} is not part of any team.",
+                        color=discord.Color.red()
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
+            else:
+                # No arguments provided - show user's own team
+                target_id = interaction.user.id
+                # Check all roles to find their team
+                for role in ['captain', 'player', 'manager', 'coach']:
+                    teams = await db.get_user_teams_by_role(target_id, role)
+                    if teams:
+                        team_data = teams[0]  # Get first team
+                        break
+                
+                if not team_data:
+                    embed = discord.Embed(
+                        title="❌ No Team Found",
+                        description="You are not part of any team. Join or create a team first!",
+                        color=discord.Color.red()
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
             
             # Get full team profile
             profile = await db.get_team_profile(team_data['id'])
@@ -71,14 +118,8 @@ class TeamProfile(commands.Cog):
                     # If it's a URL, use it directly
                     embed.set_thumbnail(url=profile['logo_url'])
             
-            # Leadership Section
+            # Leadership Section (Managers and Coach only)
             leadership_text = ""
-            
-            # Captain
-            if profile['captain']:
-                captain_user = self.bot.get_user(profile['captain']['discord_id'])
-                captain_name = captain_user.mention if captain_user else f"<@{profile['captain']['discord_id']}>"
-                leadership_text += f"**Captain:** {captain_name}\n"
             
             # Managers
             if profile['managers']:
@@ -102,14 +143,35 @@ class TeamProfile(commands.Cog):
                     inline=False
                 )
             
-            # Roster Section
-            if profile['players']:
-                roster_text = f"**Total Players:** {len(profile['players'])}\n\n"
-                for idx, player in enumerate(profile['players'], 1):
-                    player_user = self.bot.get_user(player['discord_id'])
-                    player_name = player_user.name if player_user else f"User#{player['discord_id']}"
-                    ign = player['ign'] if player['ign'] else "N/A"
-                    roster_text += f"`{idx}.` **{player_name}** • `{ign}`\n"
+            # Roster Section (including Captain)
+            roster_list = []
+            
+            # Add captain first with (Captain) suffix
+            if profile['captain']:
+                captain_ign = profile['captain']['ign'] if profile['captain']['ign'] else "N/A"
+                roster_list.append({
+                    'discord_id': profile['captain']['discord_id'],
+                    'ign': captain_ign,
+                    'is_captain': True
+                })
+            
+            # Add other players
+            for player in profile['players']:
+                # Skip if this player is also the captain (shouldn't happen but just in case)
+                if profile['captain'] and player['discord_id'] == profile['captain']['discord_id']:
+                    continue
+                roster_list.append({
+                    'discord_id': player['discord_id'],
+                    'ign': player['ign'] if player['ign'] else "N/A",
+                    'is_captain': False
+                })
+            
+            if roster_list:
+                roster_text = f"**Total Players:** {len(roster_list)}\n\n"
+                for idx, player in enumerate(roster_list, 1):
+                    ign = player['ign']
+                    captain_suffix = " (Captain)" if player['is_captain'] else ""
+                    roster_text += f"`{idx}.` **{ign}**{captain_suffix}\n"
             else:
                 roster_text = "*No players registered yet*"
             
