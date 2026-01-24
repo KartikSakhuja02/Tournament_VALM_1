@@ -379,13 +379,30 @@ class TeamLogoUploadView(discord.ui.View):
         
         await interaction.response.defer()
         
+        # Create Discord role for the team
+        try:
+            team_role = await interaction.guild.create_role(
+                name=self.team_name,
+                color=discord.Color.blue(),
+                mentionable=True,
+                reason=f"Team role created for {self.team_name}"
+            )
+            print(f"✓ Created role {team_role.name} (ID: {team_role.id})")
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Failed to create team role: {e}",
+                ephemeral=False
+            )
+            return
+        
         # Create team in database without logo
         team = await db.create_team(
             team_name=self.team_name,
             team_tag=self.team_tag,
             region=self.region,
             captain_discord_id=interaction.user.id,
-            logo_url=None  # No logo
+            logo_url=None,  # No logo
+            role_id=team_role.id  # Store the role ID
         )
         
         # Add user as team member with their selected role
@@ -394,6 +411,15 @@ class TeamLogoUploadView(discord.ui.View):
             discord_id=interaction.user.id,
             role=self.user_role  # 'captain' or 'manager'
         )
+        
+        # Assign the role to the user
+        try:
+            member = interaction.guild.get_member(interaction.user.id)
+            if member:
+                await member.add_roles(team_role)
+                print(f"✓ Assigned role {team_role.name} to {member.name}")
+        except Exception as e:
+            print(f"✗ Failed to assign role: {e}")
         
         # Determine role display text
         role_text = "team captain" if self.user_role == "captain" else "team manager"
@@ -532,13 +558,30 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
             logo_url = attachment.url
             local_logo_path = str(logo_path)
             
+            # Create Discord role for the team
+            try:
+                team_role = await interaction.guild.create_role(
+                    name=self.team_name,
+                    color=discord.Color.blue(),
+                    mentionable=True,
+                    reason=f"Team role created for {self.team_name}"
+                )
+                print(f"✓ Created role {team_role.name} (ID: {team_role.id})")
+            except Exception as e:
+                await interaction.followup.send(
+                    f"❌ Failed to create team role: {e}",
+                    ephemeral=False
+                )
+                return
+            
             # Create team in database
             team = await db.create_team(
                 team_name=self.team_name,
                 team_tag=self.team_tag,
                 region=self.region,
                 captain_discord_id=interaction.user.id,
-                logo_url=local_logo_path  # Store local path instead of Discord URL
+                logo_url=local_logo_path,  # Store local path instead of Discord URL
+                role_id=team_role.id  # Store the role ID
             )
             
             # Add user as team member with their selected role
@@ -547,6 +590,15 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 discord_id=interaction.user.id,
                 role=self.user_role  # 'captain' or 'manager'
             )
+            
+            # Assign the role to the user
+            try:
+                member = interaction.guild.get_member(interaction.user.id)
+                if member:
+                    await member.add_roles(team_role)
+                    print(f"✓ Assigned role {team_role.name} to {member.name}")
+            except Exception as e:
+                print(f"✗ Failed to assign role: {e}")
             
             # Determine role display text
             role_text = "team captain" if self.user_role == "captain" else "team manager"

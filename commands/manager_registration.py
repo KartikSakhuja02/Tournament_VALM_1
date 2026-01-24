@@ -339,6 +339,17 @@ class ManagerApprovalView(discord.ui.View):
             # Get team details for logging
             team = await db.get_team_by_id(self.team_id)
             
+            # Assign team role to manager
+            if team and team.get('role_id'):
+                try:
+                    role = interaction.guild.get_role(team['role_id'])
+                    applicant = interaction.guild.get_member(self.applicant_id)
+                    if role and applicant:
+                        await applicant.add_roles(role)
+                        print(f"✓ Assigned role {role.name} to manager {applicant.name}")
+                except Exception as e:
+                    print(f"✗ Failed to assign role: {e}")
+            
             # Success message
             applicant = interaction.guild.get_member(self.applicant_id)
             success_embed = discord.Embed(

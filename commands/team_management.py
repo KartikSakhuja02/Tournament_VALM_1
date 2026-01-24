@@ -294,6 +294,16 @@ class TeamManagementCog(commands.Cog):
             # Remove player from team
             await db.remove_team_member(team['id'], player.id)
             
+            # Remove team role from player
+            if team.get('role_id'):
+                try:
+                    role = interaction.guild.get_role(team['role_id'])
+                    if role and role in player.roles:
+                        await player.remove_roles(role)
+                        print(f"✓ Removed role {role.name} from {player.name}")
+                except Exception as e:
+                    print(f"✗ Failed to remove role: {e}")
+            
             # Notify the kicker
             await interaction.followup.send(
                 f"✅ {player.mention} has been kicked from **{team['team_name']}**!",
@@ -611,6 +621,19 @@ class TeamInviteResponseView(discord.ui.View):
                 role='player'
             )
             
+            # Assign team role to player
+            team = await db.get_team_by_id(self.team_id)
+            if team and team.get('role_id'):
+                try:
+                    role = interaction.guild.get_role(team['role_id'])
+                    if role:
+                        member = interaction.guild.get_member(interaction.user.id)
+                        if member:
+                            await member.add_roles(role)
+                            print(f"✓ Assigned role {role.name} to {member.name}")
+                except Exception as e:
+                    print(f"✗ Failed to assign role: {e}")
+            
             # Success message
             success_embed = discord.Embed(
                 title="✅ Team Invite Accepted!",
@@ -813,6 +836,17 @@ class TeamLeaveConfirmView(discord.ui.View):
             
             # Remove user from team
             await db.remove_team_member(self.team_id, interaction.user.id)
+            
+            # Remove team role from user
+            if team and team.get('role_id'):
+                try:
+                    role = interaction.guild.get_role(team['role_id'])
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if role and member and role in member.roles:
+                        await member.remove_roles(role)
+                        print(f"✓ Removed role {role.name} from {member.name}")
+                except Exception as e:
+                    print(f"✗ Failed to remove role: {e}")
             
             success_embed = discord.Embed(
                 title="✅ Left Team",

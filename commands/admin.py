@@ -2064,6 +2064,16 @@ class DeleteTeamConfirmView(discord.ui.View):
         # Get team members before deletion
         members = await db.get_team_members(team_id)
         
+        # Delete team role if it exists
+        if self.team.get('role_id'):
+            try:
+                role = interaction.guild.get_role(self.team['role_id'])
+                if role:
+                    await role.delete(reason=f"Team {team_name} deleted by admin")
+                    print(f"✓ Deleted role {role.name}")
+            except Exception as e:
+                print(f"✗ Failed to delete role: {e}")
+        
         # Delete the team (cascade deletes team_members)
         success = await db.delete_team(team_id)
         

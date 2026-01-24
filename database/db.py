@@ -284,17 +284,18 @@ class Database:
         team_tag: str,
         region: str,
         captain_discord_id: int,
-        logo_url: Optional[str] = None
+        logo_url: Optional[str] = None,
+        role_id: Optional[int] = None
     ) -> Dict:
         """Create a new team"""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO teams (team_name, team_tag, region, captain_discord_id, logo_url)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO teams (team_name, team_tag, region, captain_discord_id, logo_url, role_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *
                 """,
-                team_name, team_tag, region, captain_discord_id, logo_url
+                team_name, team_tag, region, captain_discord_id, logo_url, role_id
             )
             return dict(row)
     
