@@ -264,38 +264,11 @@ class Announce(commands.Cog):
 
 
 async def setup(bot):
-    # Populate role options when setting up
-    await bot.wait_until_ready()
-    
-    # We'll populate roles dynamically per guild
-    async def populate_roles(view: RoleSelectionView, guild: discord.Guild):
-        role_select = None
-        for item in view.children:
-            if isinstance(item, RoleSelectDropdown):
-                role_select = item
-                break
-        
-        if role_select:
-            options = [discord.SelectOption(label="None (No ping)", value="none", emoji="🚫")]
-            
-            # Add common role options
-            for role in guild.roles:
-                if role.name != "@everyone" and not role.managed and len(options) < 25:
-                    options.append(
-                        discord.SelectOption(
-                            label=role.name,
-                            value=str(role.id),
-                            emoji="📌"
-                        )
-                    )
-            
-            role_select.options = options
-    
-    # Monkey patch to populate roles before showing view
-    original_send = RoleSelectionView.__init__
+    # Monkey patch to populate roles dynamically when view is created
+    original_init = RoleSelectionView.__init__
     
     def new_init(self, message_content: str, target_channel: discord.TextChannel):
-        original_send(self, message_content, target_channel)
+        original_init(self, message_content, target_channel)
         
         # Populate roles from guild
         guild = target_channel.guild
