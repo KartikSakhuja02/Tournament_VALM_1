@@ -4,6 +4,7 @@ import os
 import asyncio
 from database.db import db
 from utils.thread_manager import add_staff_to_thread
+from commands.registration import inactivity_warning_task, cancel_inactivity_warning, _active_threads
 
 
 class ManagerRegistrationButtons(discord.ui.View):
@@ -123,6 +124,14 @@ class ManagerRegistrationButtons(discord.ui.View):
             
             await thread.send(embed=welcome_embed, view=team_select_view)
             
+            # Start inactivity warning task
+            task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
+            _active_threads[thread.id] = {
+                'task': task,
+                'target_user_id': interaction.user.id
+            }
+            print(f"✓ Started inactivity monitoring for manager thread {thread.id}")
+            
         except Exception as e:
             print(f"Error creating manager registration thread: {e}")
             await interaction.followup.send(
@@ -186,6 +195,10 @@ class TeamSelect(discord.ui.Select):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your registration.", ephemeral=True)
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         await interaction.response.defer()
         

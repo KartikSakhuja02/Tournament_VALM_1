@@ -6,6 +6,7 @@ import aiohttp
 from pathlib import Path
 from database.db import db
 from utils.thread_manager import add_staff_to_thread
+from commands.registration import inactivity_warning_task, cancel_inactivity_warning, _active_threads
 
 
 class TeamRoleSelectView(discord.ui.View):
@@ -21,6 +22,10 @@ class TeamRoleSelectView(discord.ui.View):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         # Check if user is banned
         ban_info = await db.is_player_banned(interaction.user.id)
@@ -47,6 +52,14 @@ class TeamRoleSelectView(discord.ui.View):
     @discord.ui.button(label="I'm a Manager", style=discord.ButtonStyle.secondary)
     async def manager_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """User selects manager role"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This is not your team registration.", ephemeral=True)
+            return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
@@ -690,6 +703,14 @@ class TeamRegistrationButtons(discord.ui.View):
             role_view = TeamRoleSelectView(interaction.user.id)
             
             await thread.send(embed=welcome_embed, view=role_view)
+            
+            # Start inactivity warning task
+            task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
+            _active_threads[thread.id] = {
+                'task': task,
+                'target_user_id': interaction.user.id
+            }
+            print(f"✓ Started inactivity monitoring for team thread {thread.id}")
             
         except Exception as e:
             print(f"Error creating team registration thread: {e}")
