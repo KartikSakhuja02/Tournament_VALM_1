@@ -6,6 +6,88 @@ import asyncio
 from database.db import db
 from utils.thread_manager import add_staff_to_thread
 
+# Track threads with inactivity warnings
+_active_threads = {}  # thread_id: {'task': asyncio.Task, 'target_user_id': int}
+
+
+async def inactivity_warning_task(thread: discord.Thread, target_user_id: int):
+    """
+    Background task to handle inactivity warnings for registration threads.
+    
+    Timeline:
+    - 5 minutes: First warning (tag user)
+    - 7 minutes: Final warning (tag user)
+    - 8 minutes: Delete thread with 1-minute countdown
+    """
+    try:
+        # Wait 5 minutes
+        await asyncio.sleep(300)
+        
+        # First warning
+        warning_embed = discord.Embed(
+            title="⏰ Inactivity Warning",
+            description=f"<@{target_user_id}> You haven't started your registration yet!\n\nPlease click the **Fill Form** button to continue, or this thread will be closed.",
+            color=discord.Color.orange()
+        )
+        warning_embed.set_footer(text="This is your first warning")
+        await thread.send(embed=warning_embed)
+        
+        # Wait 2 more minutes
+        await asyncio.sleep(120)
+        
+        # Final warning
+        final_embed = discord.Embed(
+            title="⚠️ FINAL WARNING",
+            description=f"<@{target_user_id}> This is your last chance!\n\n**You have 1 minute** to click the registration button or this thread will be deleted.",
+            color=discord.Color.red()
+        )
+        final_embed.set_footer(text="Thread will be deleted in 60 seconds")
+        countdown_msg = await thread.send(embed=final_embed)
+        
+        # 1-minute countdown with updates every 15 seconds
+        for remaining in [45, 30, 15]:
+            await asyncio.sleep(15)
+            countdown_embed = discord.Embed(
+                title="⚠️ FINAL WARNING",
+                description=f"<@{target_user_id}> This is your last chance!\n\n**You have {remaining} seconds** to click the registration button or this thread will be deleted.",
+                color=discord.Color.red()
+            )
+            countdown_embed.set_footer(text=f"Thread will be deleted in {remaining} seconds")
+            await countdown_msg.edit(embed=countdown_embed)
+        
+        # Final countdown
+        await asyncio.sleep(15)
+        
+        # Delete thread
+        delete_embed = discord.Embed(
+            title="🗑️ Thread Deleted",
+            description="This thread has been deleted due to inactivity.\n\nIf you want to register, please use `/register` again or contact a tournament organizer.",
+            color=discord.Color.dark_red()
+        )
+        await thread.send(embed=delete_embed)
+        
+        await asyncio.sleep(3)
+        await thread.delete()
+        
+        # Clean up tracking
+        if thread.id in _active_threads:
+            del _active_threads[thread.id]
+            
+    except asyncio.CancelledError:
+        # Task was cancelled because user clicked the button
+        pass
+    except Exception as e:
+        print(f"Error in inactivity warning task: {e}")
+
+
+def cancel_inactivity_warning(thread_id: int):
+    """Cancel the inactivity warning task for a thread"""
+    if thread_id in _active_threads:
+        task = _active_threads[thread_id]['task']
+        task.cancel()
+        del _active_threads[thread_id]
+        print(f"✓ Cancelled inactivity warning for thread {thread_id}")
+
 
 class RegistrationModal(discord.ui.Modal, title="Player Registration"):
     """Modal form for player registration"""
@@ -613,6 +695,14 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             
             await thread.send(embed=welcome_embed, view=form_view)
             
+            # Start inactivity warning task
+            task = asyncio.create_task(inactivity_warning_task(thread, target_user.id))
+            _active_threads[thread.id] = {
+                'task': task,
+                'target_user_id': target_user.id
+            }
+            print(f"✓ Started inactivity monitoring for thread {thread.id}")
+            
             # Respond to original interaction
             await interaction.followup.send(
                 f"✅ Registration thread created for {target_user.mention}: {thread.mention}",
@@ -648,6 +738,10 @@ class AssistedRegistrationView(discord.ui.View):
                 ephemeral=True
             )
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         # Show modal with target user's ID and teams
         modal = AssistedRegistrationModal(
@@ -798,6 +892,10 @@ class RegistrationButtons(discord.ui.View):
                     )
                     return
                 
+                # Cancel inactivity warning since user is now interacting
+                if isinstance(form_interaction.channel, discord.Thread):
+                    cancel_inactivity_warning(form_interaction.channel.id)
+                
                 # Show modal
                 modal = RegistrationModal()
                 await form_interaction.response.send_modal(modal)
@@ -806,6 +904,14 @@ class RegistrationButtons(discord.ui.View):
             form_view.add_item(form_button)
             
             await thread.send(embed=welcome_embed, view=form_view)
+            
+            # Start inactivity warning task
+            task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
+            _active_threads[thread.id] = {
+                'task': task,
+                'target_user_id': interaction.user.id
+            }
+            print(f"✓ Started inactivity monitoring for thread {thread.id}")
             
             # Respond to button click with followup (since we deferred)
             await interaction.followup.send(
