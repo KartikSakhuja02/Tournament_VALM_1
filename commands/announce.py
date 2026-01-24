@@ -155,8 +155,15 @@ class RoleSelectionView(discord.ui.View):
         # Build role mentions
         role_mentions = ""
         if selected_role_ids and selected_role_ids[0] != "none":
-            roles = [interaction.guild.get_role(int(role_id)) for role_id in selected_role_ids]
-            role_mentions = " ".join([role.mention for role in roles if role]) + "\n\n"
+            mentions = []
+            for role_id in selected_role_ids:
+                if role_id == "everyone":
+                    mentions.append("@everyone")
+                else:
+                    role = interaction.guild.get_role(int(role_id))
+                    if role:
+                        mentions.append(role.mention)
+            role_mentions = " ".join(mentions) + "\n\n"
         
         full_message = role_mentions + self.message_content
         
@@ -272,10 +279,14 @@ async def setup(bot):
         
         # Populate roles from guild
         guild = target_channel.guild
-        options = [discord.SelectOption(label="None (No ping)", value="none", emoji="🚫")]
+        options = [
+            discord.SelectOption(label="None (No ping)", value="none", emoji="🚫"),
+            discord.SelectOption(label="@everyone", value="everyone", emoji="🌍")
+        ]
         
+        # Add all roles except @everyone (already added above with custom value)
         for role in guild.roles:
-            if role.name != "@everyone" and not role.managed and len(options) < 25:
+            if role.name != "@everyone" and len(options) < 25:
                 options.append(
                     discord.SelectOption(
                         label=role.name,
