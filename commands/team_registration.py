@@ -412,12 +412,22 @@ class TeamLogoUploadView(discord.ui.View):
             role=self.user_role  # 'captain' or 'manager'
         )
         
-        # Assign the role to the user
+        # Assign the team role and captain/manager role to the user
         try:
             member = interaction.guild.get_member(interaction.user.id)
             if member:
+                # Assign team role
                 await member.add_roles(team_role)
-                print(f"✓ Assigned role {team_role.name} to {member.name}")
+                print(f"✓ Assigned team role {team_role.name} to {member.name}")
+                
+                # Assign captain or manager role
+                role_env_key = 'CAPTAIN_ROLE_ID' if self.user_role == 'captain' else 'MANAGER_ROLE_ID'
+                position_role_id = os.getenv(role_env_key)
+                if position_role_id:
+                    position_role = interaction.guild.get_role(int(position_role_id))
+                    if position_role:
+                        await member.add_roles(position_role)
+                        print(f"✓ Assigned {self.user_role} role to {member.name}")
         except Exception as e:
             print(f"✗ Failed to assign role: {e}")
         
@@ -591,12 +601,22 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 role=self.user_role  # 'captain' or 'manager'
             )
             
-            # Assign the role to the user
+            # Assign the team role and captain/manager role to the user
             try:
                 member = interaction.guild.get_member(interaction.user.id)
                 if member:
+                    # Assign team role
                     await member.add_roles(team_role)
-                    print(f"✓ Assigned role {team_role.name} to {member.name}")
+                    print(f"✓ Assigned team role {team_role.name} to {member.name}")
+                    
+                    # Assign captain or manager role
+                    role_env_key = 'CAPTAIN_ROLE_ID' if self.user_role == 'captain' else 'MANAGER_ROLE_ID'
+                    position_role_id = os.getenv(role_env_key)
+                    if position_role_id:
+                        position_role = interaction.guild.get_role(int(position_role_id))
+                        if position_role:
+                            await member.add_roles(position_role)
+                            print(f"✓ Assigned {self.user_role} role to {member.name}")
             except Exception as e:
                 print(f"✗ Failed to assign role: {e}")
             

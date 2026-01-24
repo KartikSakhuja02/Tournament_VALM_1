@@ -291,6 +291,14 @@ class TeamManagementCog(commands.Cog):
     async def execute_kick(self, interaction: discord.Interaction, player: discord.Member, team: dict):
         """Execute the kick action"""
         try:
+            # Get player's role in team before removing
+            team_members = await db.get_team_members(team['id'])
+            player_role = None
+            for member in team_members:
+                if member['discord_id'] == player.id:
+                    player_role = member['role']
+                    break
+            
             # Remove player from team
             await db.remove_team_member(team['id'], player.id)
             
@@ -300,9 +308,27 @@ class TeamManagementCog(commands.Cog):
                     role = interaction.guild.get_role(team['role_id'])
                     if role and role in player.roles:
                         await player.remove_roles(role)
-                        print(f"✓ Removed role {role.name} from {player.name}")
+                        print(f"✓ Removed team role {role.name} from {player.name}")
                 except Exception as e:
-                    print(f"✗ Failed to remove role: {e}")
+                    print(f"✗ Failed to remove team role: {e}")
+            
+            # Remove captain or manager role if applicable
+            if player_role in ['captain', 'manager']:
+                try:
+                    # Check if player has this role in any other team
+                    other_teams = await db.get_user_teams_by_role(player.id, player_role)
+                    
+                    # Only remove the role if they don't have it in another team
+                    if not other_teams:
+                        role_env_key = 'CAPTAIN_ROLE_ID' if player_role == 'captain' else 'MANAGER_ROLE_ID'
+                        position_role_id = os.getenv(role_env_key)
+                        if position_role_id:
+                            position_role = interaction.guild.get_role(int(position_role_id))
+                            if position_role and position_role in player.roles:
+                                await player.remove_roles(position_role)
+                                print(f"✓ Removed {player_role} role from {player.name}")
+                except Exception as e:
+                    print(f"✗ Failed to remove position role: {e}")
             
             # Notify the kicker
             await interaction.followup.send(
@@ -844,9 +870,29 @@ class TeamLeaveConfirmView(discord.ui.View):
                     member = interaction.guild.get_member(interaction.user.id)
                     if role and member and role in member.roles:
                         await member.remove_roles(role)
-                        print(f"✓ Removed role {role.name} from {member.name}")
+                        print(f"✓ Removed team role {role.name} from {member.name}")
                 except Exception as e:
-                    print(f"✗ Failed to remove role: {e}")
+                    print(f"✗ Failed to remove team role: {e}")
+            
+            # Remove captain or manager role if applicable
+            if self.user_role in ['captain', 'manager']:
+                try:
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if member:
+                        # Check if user has this role in any other team
+                        other_teams = await db.get_user_teams_by_role(interaction.user.id, self.user_role)
+                        
+                        # Only remove the role if they don't have it in another team
+                        if not other_teams:
+                            role_env_key = 'CAPTAIN_ROLE_ID' if self.user_role == 'captain' else 'MANAGER_ROLE_ID'
+                            position_role_id = os.getenv(role_env_key)
+                            if position_role_id:
+                                position_role = interaction.guild.get_role(int(position_role_id))
+                                if position_role and position_role in member.roles:
+                                    await member.remove_roles(position_role)
+                                    print(f"✓ Removed {self.user_role} role from {member.name}")
+                except Exception as e:
+                    print(f"✗ Failed to remove position role: {e}")
             
             success_embed = discord.Embed(
                 title="✅ Left Team",
@@ -1312,6 +1358,42 @@ class TransferCaptainshipMemberSelect(discord.ui.Select):
             # Update new captain role in team_members
             await db.remove_team_member(self.team_id, new_captain_id)
             await db.add_team_member(self.team_id, new_captain_id, 'captain')
+            
+            # Update Discord roles - transfer captain role
+            try:
+                old_captain_member = self.guild.get_member(self.current_captain_id)
+                captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+                manager_role_id = os.getenv('MANAGER_ROLE_ID')
+                
+                if captain_role_id:
+                    captain_role = self.guild.get_role(int(captain_role_id))
+                    
+                    # Remove captain role from old captain
+                    if captain_role and old_captain_member and captain_role in old_captain_member.roles:
+                        await old_captain_member.remove_roles(captain_role)
+                        print(f"✓ Removed Captain role from {old_captain_member.name}")
+                    
+                    # Add captain role to new captain
+                    if captain_role and new_captain:
+                        await new_captain.add_roles(captain_role)
+                        print(f"✓ Assigned Captain role to {new_captain.name}")
+                
+                # Assign manager role to old captain
+                if manager_role_id and old_captain_member:
+                    manager_role = self.guild.get_role(int(manager_role_id))
+                    if manager_role:
+                        await old_captain_member.add_roles(manager_role)
+                        print(f"✓ Assigned Manager role to {old_captain_member.name}")
+                
+                # Remove manager role from new captain (if they had it)
+                if manager_role_id and new_captain:
+                    manager_role = self.guild.get_role(int(manager_role_id))
+                    if manager_role and manager_role in new_captain.roles:
+                        await new_captain.remove_roles(manager_role)
+                        print(f"✓ Removed Manager role from {new_captain.name}")
+                        
+            except Exception as e:
+                print(f"✗ Failed to update captain/manager roles: {e}")
             
             # Success message to old captain
             success_embed = discord.Embed(

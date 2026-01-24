@@ -339,14 +339,24 @@ class ManagerApprovalView(discord.ui.View):
             # Get team details for logging
             team = await db.get_team_by_id(self.team_id)
             
-            # Assign team role to manager
+            # Assign team role and manager role to manager
             if team and team.get('role_id'):
                 try:
-                    role = interaction.guild.get_role(team['role_id'])
                     applicant = interaction.guild.get_member(self.applicant_id)
-                    if role and applicant:
-                        await applicant.add_roles(role)
-                        print(f"✓ Assigned role {role.name} to manager {applicant.name}")
+                    if applicant:
+                        # Assign team role
+                        team_role = interaction.guild.get_role(team['role_id'])
+                        if team_role:
+                            await applicant.add_roles(team_role)
+                            print(f"✓ Assigned team role {team_role.name} to manager {applicant.name}")
+                        
+                        # Assign manager role
+                        manager_role_id = os.getenv('MANAGER_ROLE_ID')
+                        if manager_role_id:
+                            manager_role = interaction.guild.get_role(int(manager_role_id))
+                            if manager_role:
+                                await applicant.add_roles(manager_role)
+                                print(f"✓ Assigned Manager role to {applicant.name}")
                 except Exception as e:
                     print(f"✗ Failed to assign role: {e}")
             
