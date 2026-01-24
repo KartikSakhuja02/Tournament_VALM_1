@@ -402,6 +402,17 @@ class ConsentView(discord.ui.View):
                             role='player'
                         )
                         print(f"✓ Added {self.ign} to team {team['team_name']} as player")
+                        
+                        # Assign team role to the player
+                        if team.get('role_id'):
+                            try:
+                                role = interaction.guild.get_role(team['role_id'])
+                                member = interaction.guild.get_member(self.user_id)
+                                if role and member:
+                                    await member.add_roles(role)
+                                    print(f"✓ Assigned team role {role.name} to {self.ign}")
+                            except Exception as e:
+                                print(f"✗ Failed to assign team role: {e}")
                     except Exception as e:
                         print(f"✗ Failed to add {self.ign} to team {team['team_name']}: {e}")
             
