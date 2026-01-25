@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import asyncio
 import aiohttp
+import datetime
 from pathlib import Path
 from database.db import db
 from utils.thread_manager import add_staff_to_thread
@@ -372,6 +373,148 @@ class RegionMismatchView(discord.ui.View):
             await interaction.channel.delete()
 
 
+class LogoConfirmationView(discord.ui.View):
+    """View for confirming the uploaded logo"""
+    
+    def __init__(self, attachment, team_name, team_tag, region, user_role, user_id):
+        super().__init__(timeout=60.0)
+        self.attachment = attachment
+        self.team_name = team_name
+        self.team_tag = team_tag
+        self.region = region
+        self.user_role = user_role
+        self.user_id = user_id
+        self.accepted = False
+        self.rejected = False
+    
+    @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success)
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Accept the logo and complete registration"""
+        await interaction.response.defer()
+        
+        # Download and save the logo
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.attachment.url) as resp:
+                    if resp.status == 200:
+                        logo_data = await resp.read()
+                        
+                        # Save to file
+                        os.makedirs('team_logos', exist_ok=True)
+                        filename = f"team_logos/{self.team_name.replace(' ', '_')}.png"
+                        with open(filename, 'wb') as f:
+                            f.write(logo_data)
+                        
+                        logo_url = self.attachment.url
+                    else:
+                        await interaction.channel.send("❌ Failed to download the logo. Continuing without logo.")
+                        logo_url = None
+        except Exception as e:
+            await interaction.channel.send(f"❌ Error saving logo: {e}. Continuing without logo.")
+            logo_url = None
+        
+        # Create Discord role for the team
+        try:
+            team_role = await interaction.guild.create_role(
+                name=self.team_name,
+                color=discord.Color.blue(),
+                mentionable=True,
+                reason=f"Team role created for {self.team_name}"
+            )
+            print(f"✓ Created role {team_role.name} (ID: {team_role.id})")
+        except Exception as e:
+            await interaction.channel.send(f"❌ Failed to create team role: {e}")
+            self.stop()
+            return
+        
+        captain_id = interaction.user.id if self.user_role == 'captain' else None
+        
+        # Create team in database
+        team = await db.create_team(
+            team_name=self.team_name,
+            team_tag=self.team_tag,
+            region=self.region,
+            captain_discord_id=captain_id,
+            logo_url=logo_url,
+            role_id=team_role.id
+        )
+        
+        await db.add_team_member(
+            team_id=team['id'],
+            discord_id=self.user_id,
+            role=self.user_role
+        )
+        
+        # Assign roles
+        try:
+            member = interaction.guild.get_member(self.user_id)
+            if member:
+                await member.add_roles(team_role)
+                
+                role_env_key = 'CAPTAIN_ROLE_ID' if self.user_role == 'captain' else 'MANAGER_ROLE_ID'
+                position_role_id = os.getenv(role_env_key)
+                if position_role_id:
+                    position_role = interaction.guild.get_role(int(position_role_id))
+                    if position_role:
+                        await member.add_roles(position_role)
+        except Exception as e:
+            print(f"✗ Failed to assign role: {e}")
+        
+        role_text = "team captain" if self.user_role == "captain" else "team manager"
+        
+        success_embed = discord.Embed(
+            title="✅ Team Registered Successfully!",
+            description=(
+                f"**Team Name:** `{self.team_name}`\n"
+                f"**Team Tag:** `{self.team_tag}`\n"
+                f"**Region:** `{self.region}`\n"
+                f"**Your Role:** {role_text.title()}\n\n"
+                f"Your team has been created! You are now the {role_text}."
+            ),
+            color=discord.Color.green()
+        )
+        
+        if logo_url:
+            success_embed.set_thumbnail(url=logo_url)
+        
+        await interaction.channel.send(embed=success_embed)
+        
+        # Log to channel
+        log_channel_id = os.getenv('TEAM_REGISTRATION_LOG_CHANNEL_ID')
+        if log_channel_id:
+            log_channel = interaction.guild.get_channel(int(log_channel_id))
+            if log_channel:
+                log_embed = discord.Embed(
+                    title="New Team Registered",
+                    description=(
+                        f"**Team:** {self.team_name} [{self.team_tag}]\n"
+                        f"**Region:** {self.region}\n"
+                        f"**{role_text.title()}:** <@{self.user_id}>\n"
+                        f"**Team ID:** {team['id']}"
+                    ),
+                    color=discord.Color.blue(),
+                    timestamp=datetime.datetime.now()
+                )
+                if logo_url:
+                    log_embed.set_thumbnail(url=logo_url)
+                await log_channel.send(embed=log_embed)
+        
+        self.accepted = True
+        self.stop()
+        
+        # Close thread after delay
+        await asyncio.sleep(5)
+        if isinstance(interaction.channel, discord.Thread):
+            await interaction.channel.delete()
+    
+    @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
+    async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Reject the logo and ask for a new one"""
+        await interaction.response.send_message("❌ Logo rejected.", ephemeral=False)
+        self.rejected = True
+        self.stop()
+
+
 class TeamLogoUploadView(discord.ui.View):
     """View for team logo upload"""
     
@@ -385,19 +528,175 @@ class TeamLogoUploadView(discord.ui.View):
     
     @discord.ui.button(label="Upload Logo", style=discord.ButtonStyle.primary)
     async def upload_logo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Show logo upload modal"""
+        """Show logo upload instructions"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
         
-        # Show modal to collect logo message
-        modal = TeamLogoModal(
+        await interaction.response.send_message(
+            "✅ **Logo Upload Instructions:**\n\n"
+            "• Send your team logo as an image attachment in this thread\n"
+            "• You have **5 minutes** to upload\n"
+            "• If your teammate has the logo, mention/tag them and they'll be added to help\n"
+            "• Any image sent by anyone in this thread will be shown for approval",
+            ephemeral=False
+        )
+        
+        # Start logo upload process
+        await self.wait_for_logo_upload(interaction)
+    
+    async def wait_for_logo_upload(self, interaction: discord.Interaction):
+        """Wait for logo upload with mention detection and approval flow"""
+        thread = interaction.channel
+        
+        while True:  # Loop to allow retries
+            def check(m):
+                # Accept messages with attachments or mentions
+                return (m.channel.id == thread.id and 
+                       (len(m.attachments) > 0 or len(m.mentions) > 0))
+            
+            try:
+                msg = await interaction.client.wait_for('message', timeout=300.0, check=check)  # 5 minutes
+                
+                # If message has mentions, add them to thread
+                if msg.mentions and len(msg.attachments) == 0:
+                    for mentioned_user in msg.mentions:
+                        if mentioned_user.bot:
+                            continue
+                        try:
+                            await thread.add_user(mentioned_user)
+                            await thread.send(f"✅ Added {mentioned_user.mention} to the thread! They can now upload the logo.")
+                        except:
+                            await thread.send(f"❌ Couldn't add {mentioned_user.mention} to the thread.")
+                    continue  # Go back to waiting for an image
+                
+                # If message has attachment
+                if len(msg.attachments) > 0:
+                    attachment = msg.attachments[0]
+                    
+                    # Check if it's an image
+                    if not attachment.content_type or not attachment.content_type.startswith('image/'):
+                        await thread.send(
+                            "❌ Please upload a valid image file (PNG, JPG, JPEG, GIF).",
+                        )
+                        continue  # Try again
+                    
+                    # Show the image and ask for confirmation
+                    confirm_embed = discord.Embed(
+                        title="Logo Preview",
+                        description=f"Is this the logo for **{self.team_name}**?",
+                        color=discord.Color.blue()
+                    )
+                    confirm_embed.set_image(url=attachment.url)
+                    confirm_embed.set_footer(text="Click Accept or Reject")
+                    
+                    # Create confirmation view
+                    confirm_view = LogoConfirmationView(
+                        attachment=attachment,
+                        team_name=self.team_name,
+                        team_tag=self.team_tag,
+                        region=self.region,
+                        user_role=self.user_role,
+                        user_id=self.user_id
+                    )
+                    
+                    await thread.send(embed=confirm_embed, view=confirm_view)
+                    
+                    # Wait for the user's decision
+                    await confirm_view.wait()
+                    
+                    if confirm_view.accepted:
+                        # Logo accepted, exit loop
+                        break
+                    elif confirm_view.rejected:
+                        # Logo rejected, ask to send again
+                        await thread.send("📤 Please send a different image for the team logo.")
+                        continue
+                    else:
+                        # Timeout
+                        await thread.send("⏱️ Confirmation timed out. Please send the logo again.")
+                        continue
+                        
+            except asyncio.TimeoutError:
+                await thread.send(
+                    "⏱️ Logo upload timed out (5 minutes).\n"
+                    "Team registration will continue without a logo. You can add it later by contacting an administrator."
+                )
+                # Complete registration without logo
+                await self.complete_registration_without_logo(interaction)
+                return
+    
+    async def complete_registration_without_logo(self, interaction: discord.Interaction):
+        """Complete team registration without logo"""
+        # Create Discord role for the team
+        try:
+            team_role = await interaction.guild.create_role(
+                name=self.team_name,
+                color=discord.Color.blue(),
+                mentionable=True,
+                reason=f"Team role created for {self.team_name}"
+            )
+            print(f"✓ Created role {team_role.name} (ID: {team_role.id})")
+        except Exception as e:
+            await interaction.channel.send(
+                f"❌ Failed to create team role: {e}",
+            )
+            return
+        
+        captain_id = interaction.user.id if self.user_role == 'captain' else None
+        
+        team = await db.create_team(
             team_name=self.team_name,
             team_tag=self.team_tag,
             region=self.region,
-            user_role=self.user_role
+            captain_discord_id=captain_id,
+            logo_url=None,
+            role_id=team_role.id
         )
-        await interaction.response.send_modal(modal)
+        
+        await db.add_team_member(
+            team_id=team['id'],
+            discord_id=interaction.user.id,
+            role=self.user_role
+        )
+        
+        # Assign roles
+        try:
+            member = interaction.guild.get_member(interaction.user.id)
+            if member:
+                await member.add_roles(team_role)
+                
+                role_env_key = 'CAPTAIN_ROLE_ID' if self.user_role == 'captain' else 'MANAGER_ROLE_ID'
+                position_role_id = os.getenv(role_env_key)
+                if position_role_id:
+                    position_role = interaction.guild.get_role(int(position_role_id))
+                    if position_role:
+                        await member.add_roles(position_role)
+        except Exception as e:
+            print(f"✗ Failed to assign role: {e}")
+        
+        role_text = "team captain" if self.user_role == "captain" else "team manager"
+        
+        success_embed = discord.Embed(
+            title="✅ Team Registered Successfully!",
+            description=(
+                f"**Team Name:** `{self.team_name}`\n"
+                f"**Team Tag:** `{self.team_tag}`\n"
+                f"**Region:** `{self.region}`\n"
+                f"**Your Role:** {role_text.title()}\n\n"
+                f"Your team has been created! You are now the {role_text}.\n"
+                "You can add a logo later by contacting an administrator."
+            ),
+            color=discord.Color.green()
+        )
+        
+        await interaction.channel.send(embed=success_embed)
+        
+        await self.log_team_registration_no_logo(interaction, team, role_text)
+        
+        await asyncio.sleep(5)
+        if isinstance(interaction.channel, discord.Thread):
+            await interaction.channel.delete()
     
     @discord.ui.button(label="Skip Logo", style=discord.ButtonStyle.secondary)
     async def skip_logo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
