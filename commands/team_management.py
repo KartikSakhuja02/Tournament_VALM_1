@@ -81,16 +81,29 @@ class TeamManagementCog(commands.Cog):
             )
             return
         
+        # Check if team has a captain
+        team_info = await db.get_team_by_id(team['id'])
+        has_captain = team_info.get('captain_discord_id') is not None
+        is_first_player = len(team_members) == 0
+        
+        # Build invite description
+        invite_description = (
+            f"**{interaction.user.name}** has invited you to join their team!\n\n"
+            f"**Team:** {team['team_name']} [{team['team_tag']}]\n"
+            f"**Region:** {team['region']}\n"
+            f"**Invited by:** {interaction.user.mention}\n\n"
+        )
+        
+        # Add captain notice if this player will become captain
+        if is_first_player and not has_captain:
+            invite_description += "🎖️ **You will become the team captain!**\n\n"
+        
+        invite_description += "Would you like to join this team?"
+        
         # Create invite embed for DM
         invite_embed = discord.Embed(
             title="Team Invite",
-            description=(
-                f"**{interaction.user.name}** has invited you to join their team!\n\n"
-                f"**Team:** {team['team_name']} [{team['team_tag']}]\n"
-                f"**Region:** {team['region']}\n"
-                f"**Invited by:** {interaction.user.mention}\n\n"
-                "Would you like to join this team?"
-            ),
+            description=invite_description,
             color=discord.Color.blue()
         )
         
@@ -640,15 +653,26 @@ class TeamInviteResponseView(discord.ui.View):
                 )
                 return
             
+            # Check if this team has a captain yet
+            team = await db.get_team_by_id(self.team_id)
+            has_captain = team.get('captain_discord_id') is not None
+            is_first_player = len(team_members) == 0
+            
+            # Determine role: first player becomes captain, others are regular players
+            player_role = 'captain' if (is_first_player and not has_captain) else 'player'
+            
             # Add player to team
             await db.add_team_member(
                 team_id=self.team_id,
                 discord_id=interaction.user.id,
-                role='player'
+                role=player_role
             )
             
+            # If this player is becoming captain, update the teams table
+            if player_role == 'captain':
+                await db.update_team(self.team_id, captain_discord_id=interaction.user.id)
+            
             # Assign team role to player
-            team = await db.get_team_by_id(self.team_id)
             if team and team.get('role_id'):
                 try:
                     role = interaction.guild.get_role(team['role_id'])
@@ -660,13 +684,33 @@ class TeamInviteResponseView(discord.ui.View):
                 except Exception as e:
                     print(f"✗ Failed to assign role: {e}")
             
+            # Assign captain role if they became captain
+            if player_role == 'captain':
+                try:
+                    captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+                    if captain_role_id:
+                        captain_role = interaction.guild.get_role(int(captain_role_id))
+                        if captain_role:
+                            member = interaction.guild.get_member(interaction.user.id)
+                            if member:
+                                await member.add_roles(captain_role)
+                                print(f"✓ Assigned Captain role to {member.name}")
+                except Exception as e:
+                    print(f"✗ Failed to assign Captain role: {e}")
+            
             # Success message
+            success_message = (
+                f"You have successfully joined **{self.team_name}**!\n\n"
+            )
+            
+            if player_role == 'captain':
+                success_message += "🎖️ **You are now the team captain!**\n\n"
+            
+            success_message += "Welcome to the team!"
+            
             success_embed = discord.Embed(
                 title="✅ Team Invite Accepted!",
-                description=(
-                    f"You have successfully joined **{self.team_name}**!\n\n"
-                    "Welcome to the team!"
-                ),
+                description=success_message,
                 color=discord.Color.green()
             )
             

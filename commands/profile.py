@@ -24,6 +24,14 @@ class Profile(commands.Cog):
             profile = await db.get_player_profile(interaction.user.id)
             
             if not profile:
+                # Check if user is a manager of any team
+                manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
+                
+                if manager_teams:
+                    # Show manager profile instead
+                    await self.show_manager_profile(interaction, manager_teams)
+                    return
+                
                 embed = discord.Embed(
                     title="❌ Profile Not Found",
                     description="You are not registered as a player. Use `/register` to register.",
@@ -97,6 +105,65 @@ class Profile(commands.Cog):
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    async def show_manager_profile(self, interaction: discord.Interaction, manager_teams: list):
+        """Show manager profile with team information"""
+        # For now, show info for the first team (we can expand to multiple teams later)
+        team = manager_teams[0]
+        
+        # Get team members
+        team_members = await db.get_team_members(team['id'])
+        
+        # Find captain
+        captain = None
+        for member in team_members:
+            if member['role'] == 'captain':
+                captain = member
+                break
+        
+        # Create manager profile embed
+        embed = discord.Embed(
+            title=f"👔 Manager Profile",
+            color=discord.Color.purple(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Manager Info Section
+        embed.add_field(
+            name="👤 Manager Info",
+            value=f"**Discord:** {interaction.user.mention}\n"
+                  f"**Discord ID:** `{interaction.user.id}`\n"
+                  f"**Role:** Team Manager",
+            inline=False
+        )
+        
+        # Team Info Section
+        captain_display = f"<@{captain['discord_id']}>" if captain else "⚠️ *No captain yet - First invited player will become captain*"
+        
+        embed.add_field(
+            name="🏆 Team Information",
+            value=f"**Team Name:** {team['team_name']}\n"
+                  f"**Team Tag:** [{team['team_tag']}]\n"
+                  f"**Region:** {team['region']}\n"
+                  f"**Captain:** {captain_display}\n"
+                  f"**Members:** {len(team_members)}/5",
+            inline=False
+        )
+        
+        # Team Logo
+        if team.get('logo_url'):
+            embed.set_thumbnail(url=team['logo_url'])
+        else:
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        
+        # Footer with info note
+        if not captain:
+            embed.set_footer(text="💡 Tip: Invite a player to your team - they'll automatically become the captain!")
+        else:
+            embed.set_footer(text=f"Team created on {team['created_at'].strftime('%b %d, %Y')}")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 
 async def setup(bot):
