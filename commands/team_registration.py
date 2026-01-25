@@ -140,6 +140,10 @@ class TeamNameModal(discord.ui.Modal, title="Team Registration - Step 1"):
     
     async def on_submit(self, interaction: discord.Interaction):
         """Handle form submission - show region selector"""
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.defer()
         
         # Validate team name doesn't exist
@@ -227,6 +231,10 @@ class TeamRegionSelect(discord.ui.Select):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         await interaction.response.defer()
         
@@ -327,6 +335,10 @@ class RegionMismatchView(discord.ui.View):
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
         
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.defer()
         
         # Proceed to logo upload
@@ -362,6 +374,10 @@ class RegionMismatchView(discord.ui.View):
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
         
+        # Cancel inactivity warning since user is cancelling
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.send_message(
             "Team registration cancelled. You can start over by clicking the **Register Your Team** button again.",
             ephemeral=False
@@ -390,6 +406,10 @@ class LogoConfirmationView(discord.ui.View):
     @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Accept the logo and complete registration"""
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.defer()
         
         # Download and save the logo
@@ -518,6 +538,10 @@ class LogoConfirmationView(discord.ui.View):
     @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Reject the logo and ask for a new one"""
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.send_message("❌ Logo rejected.", ephemeral=False)
         self.rejected = True
         self.stop()
@@ -540,6 +564,10 @@ class TeamLogoUploadView(discord.ui.View):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         await interaction.response.send_message(
             "✅ **Logo Upload Instructions:**\n\n"
@@ -719,6 +747,10 @@ class TeamLogoUploadView(discord.ui.View):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not your team registration.", ephemeral=True)
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         await interaction.response.defer()
         
