@@ -492,7 +492,7 @@ class ManagerRegistrationCog(commands.Cog):
         """Create the manager registration embed message"""
         embed = discord.Embed(
             title="Manager Registration",
-            description="Want to become a manager for a team? Click the button below to get started.",
+            description="Welcome to the VALORANT Mobile India Bot! Want to become a manager for a team? Click the button below to get started.",
             color=discord.Color.blue()
         )
         

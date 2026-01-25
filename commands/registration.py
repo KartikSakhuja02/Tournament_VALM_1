@@ -951,7 +951,7 @@ class RegistrationButtons(discord.ui.View):
             
             # Send welcome message in thread
             welcome_embed = discord.Embed(
-                title="Welcome to Registration!",
+                title="Welcome to VALORANT Mobile India Tournament Registration!",
                 description=(
                     f"Hey {interaction.user.mention}!\n\n"
                     "Thank you for your interest in joining the tournament.\n\n"
@@ -1369,7 +1369,7 @@ class RegistrationCog(commands.Cog):
         """Create the registration embed message"""
         embed = discord.Embed(
             title="VALORANT Tournament Registration",
-            description="Welcome to the Bot! Register yourself or let your team's leadership help you join.",
+            description="Welcome to the VALORANT Mobile India Bot! Register yourself or let your team's leadership help you join.",
             color=discord.Color.red()  # VALORANT red theme
         )
         

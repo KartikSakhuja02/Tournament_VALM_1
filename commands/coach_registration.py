@@ -491,7 +491,7 @@ class CoachRegistrationCog(commands.Cog):
         """Create the coach registration embed message"""
         embed = discord.Embed(
             title="Coach Registration",
-            description="Want to become a coach for a team? Click the button below to get started.",
+            description="Welcome to the VALORANT Mobile India Bot! Want to become a coach for a team? Click the button below to get started.",
             color=0x5865F2  # Discord blurple
         )
         
