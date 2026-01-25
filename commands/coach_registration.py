@@ -367,6 +367,10 @@ class CoachApprovalView(discord.ui.View):
             )
             return
         
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
+        
         await interaction.response.defer()
         
         try:
@@ -458,6 +462,10 @@ class CoachApprovalView(discord.ui.View):
                 ephemeral=True
             )
             return
+        
+        # Cancel inactivity warning since user is now interacting
+        if isinstance(interaction.channel, discord.Thread):
+            cancel_inactivity_warning(interaction.channel.id)
         
         await interaction.response.defer()
         
