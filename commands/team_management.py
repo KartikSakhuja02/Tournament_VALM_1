@@ -466,7 +466,7 @@ class TeamManagementCog(commands.Cog):
             ephemeral=True
         )
     
-    @app_commands.command(name="transfer-captainship", description="Transfer team captainship to another member")
+    @app_commands.command(name="transfer-captainship", description="Transfer team captainship to another member (/transfer-captainship)")
     @commands_channel_only()
     async def transfer_captainship(self, interaction: discord.Interaction):
         """Transfer captainship to another team member"""
