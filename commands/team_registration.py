@@ -749,26 +749,6 @@ class TeamRegistrationButtons(discord.ui.View):
         # Respond immediately to prevent timeout
         await interaction.response.defer(ephemeral=True)
         
-        # Check if player is registered (required for team captain)
-        player = await db.get_player_by_discord_id(interaction.user.id)
-        if not player:
-            await interaction.followup.send(
-                "❌ You must be registered as a player before creating a team.\n"
-                "Please use the player registration first.",
-                ephemeral=True
-            )
-            return
-        
-        # Check if user already captains a team
-        existing_team = await db.get_team_by_captain(interaction.user.id)
-        if existing_team:
-            await interaction.followup.send(
-                f"❌ You already captain a team: **{existing_team['team_name']}** (`{existing_team['team_tag']}`)\n"
-                "Each player can only captain one team.",
-                ephemeral=True
-            )
-            return
-        
         # Create private thread
         try:
             thread = await interaction.channel.create_thread(
