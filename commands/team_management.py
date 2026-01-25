@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+import re
 from database.db import db
 from utils.checks import commands_channel_only
 
@@ -12,10 +13,10 @@ class TeamManagementCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
-    @app_commands.command(name="invite", description="Invite a player to your team")
-    @app_commands.describe(player="The player to invite to your team")
-    async def invite_player(self, interaction: discord.Interaction, player: discord.Member):
-        """Invite a player to join your team"""
+    @app_commands.command(name="invite", description="Invite one or more players to your team")
+    @app_commands.describe(players="The players to invite (mention them: @player1 @player2 ...)")
+    async def invite_player(self, interaction: discord.Interaction, players: str):
+        """Invite one or more players to join your team"""
         await interaction.response.defer(ephemeral=True)
         
         # Check if user has Captain or Manager role
@@ -51,20 +52,29 @@ class TeamManagementCog(commands.Cog):
             )
             return
         
-        # Check if the invited player is registered
-        invited_player = await db.get_player_by_discord_id(player.id)
-        if not invited_player:
+        # Parse mentions from the input
+        # Discord mentions are in format <@USER_ID> or <@!USER_ID>
+        mention_pattern = r'<@!?(\d+)>'
+        user_ids = re.findall(mention_pattern, players)
+        
+        if not user_ids:
             await interaction.followup.send(
-                f"❌ {player.mention} is not registered yet.\n"
-                "Players must be registered before they can be invited to teams.",
+                "❌ Please mention at least one player to invite.\n"
+                "Example: `/invite @player1 @player2 @player3`",
                 ephemeral=True
             )
             return
         
-        # Check if player is the same as the inviter
-        if player.id == interaction.user.id:
+        # Get member objects for all mentioned users
+        mentioned_members = []
+        for user_id in user_ids:
+            member = interaction.guild.get_member(int(user_id))
+            if member:
+                mentioned_members.append(member)
+        
+        if not mentioned_members:
             await interaction.followup.send(
-                "❌ You cannot invite yourself!",
+                "❌ Could not find any valid members to invite.",
                 ephemeral=True
             )
             return
@@ -74,22 +84,110 @@ class TeamManagementCog(commands.Cog):
             # Show team selection dropdown
             view = TeamInviteSelectView(
                 inviter_id=interaction.user.id,
-                invited_player=player,
+                invited_players=mentioned_members,
                 teams=user_teams
             )
             
             await interaction.followup.send(
-                "Select which team you want to invite the player to:",
+                f"Select which team you want to invite {len(mentioned_members)} player(s) to:",
                 view=view,
                 ephemeral=True
             )
         else:
-            # Only one team, send invite directly
+            # Only one team, send invites directly
             team = user_teams[0]
-            await self.send_team_invite(interaction, player, team)
+            await self.send_team_invites(interaction, mentioned_members, team)
+    
+    async def send_team_invites(self, interaction: discord.Interaction, players: list, team: dict):
+        """Send team invites to multiple players"""
+        successful_invites = []
+        failed_invites = []
+        
+        for player in players:
+            # Check if the invited player is registered
+            invited_player = await db.get_player_by_discord_id(player.id)
+            if not invited_player:
+                failed_invites.append(f"{player.mention} - Not registered")
+                continue
+            
+            # Check if player is the same as the inviter
+            if player.id == interaction.user.id:
+                failed_invites.append(f"{player.mention} - Cannot invite yourself")
+                continue
+            
+            # Check if player is already a member of this team
+            team_members = await db.get_team_members(team['id'])
+            if any(m['discord_id'] == player.id for m in team_members):
+                failed_invites.append(f"{player.mention} - Already in team")
+                continue
+            
+            # Send the invite
+            try:
+                await self.send_single_invite(player, team, interaction, team_members)
+                successful_invites.append(player.mention)
+            except discord.Forbidden:
+                failed_invites.append(f"{player.mention} - DMs disabled")
+            except Exception as e:
+                failed_invites.append(f"{player.mention} - Error: {str(e)[:50]}")
+        
+        # Build response message
+        response_parts = []
+        
+        if successful_invites:
+            response_parts.append(f"✅ **Invites sent to {len(successful_invites)} player(s):**\n" + "\n".join(successful_invites))
+        
+        if failed_invites:
+            response_parts.append(f"\n❌ **Failed to invite {len(failed_invites)} player(s):**\n" + "\n".join(failed_invites))
+        
+        if not successful_invites and not failed_invites:
+            response_parts.append("❌ No valid players to invite.")
+        
+        await interaction.followup.send("\n".join(response_parts), ephemeral=True)
+    
+    async def send_single_invite(self, player: discord.Member, team: dict, interaction: discord.Interaction, team_members: list):
+        """Send a single team invite to a player"""
+        # Check if team has a captain
+        team_info = await db.get_team_by_id(team['id'])
+        has_captain = team_info.get('captain_discord_id') is not None
+        is_first_player = len(team_members) == 0
+        
+        # Build invite description
+        invite_description = (
+            f"**{interaction.user.name}** has invited you to join their team!\n\n"
+            f"**Team:** {team['team_name']} [{team['team_tag']}]\n"
+            f"**Region:** {team['region']}\n"
+            f"**Invited by:** {interaction.user.mention}\n\n"
+        )
+        
+        # Add captain notice if this player will become captain
+        if is_first_player and not has_captain:
+            invite_description += "🎖️ **You will become the team captain!**\n\n"
+        
+        invite_description += "Would you like to join this team?"
+        
+        # Create invite embed for DM
+        invite_embed = discord.Embed(
+            title="Team Invite",
+            description=invite_description,
+            color=discord.Color.blue()
+        )
+        
+        # Create view with accept/decline buttons
+        invite_view = TeamInviteResponseView(
+            team_id=team['id'],
+            team_name=team['team_name'],
+            inviter_id=interaction.user.id,
+            inviter_name=interaction.user.name,
+            guild=interaction.guild
+        )
+        
+        # Send DM
+        dm_channel = await player.create_dm()
+        await dm_channel.send(embed=invite_embed, view=invite_view)
+        print(f"✓ Sent team invite to {player.name} for team {team['team_name']}")
     
     async def send_team_invite(self, interaction: discord.Interaction, player: discord.Member, team: dict):
-        """Send the actual team invite DM to the player"""
+        """Send the actual team invite DM to the player (legacy single invite)"""
         # Check if player is already a member of this team
         team_members = await db.get_team_members(team['id'])
         if any(m['discord_id'] == player.id for m in team_members):
@@ -634,24 +732,24 @@ class TeamManagementCog(commands.Cog):
 
 
 class TeamInviteSelectView(discord.ui.View):
-    """View for selecting which team to invite player to"""
+    """View for selecting which team to invite player(s) to"""
     
-    def __init__(self, inviter_id: int, invited_player: discord.Member, teams: list):
+    def __init__(self, inviter_id: int, invited_players: list, teams: list):
         super().__init__(timeout=300)
         self.inviter_id = inviter_id
-        self.invited_player = invited_player
+        self.invited_players = invited_players  # Now a list of members
         self.teams = teams
         
         # Add team selection dropdown
-        self.add_item(TeamInviteSelect(inviter_id, invited_player, teams))
+        self.add_item(TeamInviteSelect(inviter_id, invited_players, teams))
 
 
 class TeamInviteSelect(discord.ui.Select):
     """Dropdown for team selection when inviting"""
     
-    def __init__(self, inviter_id: int, invited_player: discord.Member, teams: list):
+    def __init__(self, inviter_id: int, invited_players: list, teams: list):
         self.inviter_id = inviter_id
-        self.invited_player = invited_player
+        self.invited_players = invited_players  # Now a list of members
         self.teams = teams
         
         options = []
@@ -689,7 +787,8 @@ class TeamInviteSelect(discord.ui.Select):
         if selected_team:
             cog = interaction.client.get_cog("TeamManagementCog")
             if cog:
-                await cog.send_team_invite(interaction, self.invited_player, selected_team)
+                # Send invites to all players
+                await cog.send_team_invites(interaction, self.invited_players, selected_team)
 
 
 class TeamInviteResponseView(discord.ui.View):
