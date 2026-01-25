@@ -668,6 +668,21 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             )
             return
         
+        # Check if target user already has an active registration thread
+        for thread_id, thread_data in _active_threads.items():
+            if thread_data['target_user_id'] == target_user.id:
+                try:
+                    thread = interaction.guild.get_thread(thread_id)
+                    if thread and not thread.archived:
+                        await interaction.followup.send(
+                            f"❌ {target_user.mention} already has an active registration thread: {thread.mention}\n"
+                            "Please complete the registration there first.",
+                            ephemeral=True
+                        )
+                        return
+                except:
+                    pass
+        
         # Create private thread
         try:
             thread = await interaction.channel.create_thread(
@@ -841,6 +856,21 @@ class RegistrationButtons(discord.ui.View):
                 ephemeral=True
             )
             return
+        
+        # Check if user already has an active registration thread
+        for thread_id, thread_data in _active_threads.items():
+            if thread_data['target_user_id'] == interaction.user.id:
+                try:
+                    thread = interaction.guild.get_thread(thread_id)
+                    if thread and not thread.archived:
+                        await interaction.followup.send(
+                            f"❌ You already have an active registration thread: {thread.mention}\n"
+                            "Please complete your registration there first.",
+                            ephemeral=True
+                        )
+                        return
+                except:
+                    pass
         
         # Create private thread
         try:
