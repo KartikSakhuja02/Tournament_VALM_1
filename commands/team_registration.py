@@ -425,11 +425,15 @@ class TeamLogoUploadView(discord.ui.View):
             return
         
         # Create team in database without logo
+        # For managers, captain_discord_id will be None (set later when captain joins)
+        # For captains, captain_discord_id is the current user
+        captain_id = interaction.user.id if self.user_role == 'captain' else None
+        
         team = await db.create_team(
             team_name=self.team_name,
             team_tag=self.team_tag,
             region=self.region,
-            captain_discord_id=interaction.user.id,
+            captain_discord_id=captain_id,
             logo_url=None,  # No logo
             role_id=team_role.id  # Store the role ID
         )
@@ -614,11 +618,15 @@ class TeamLogoModal(discord.ui.Modal, title="Upload Team Logo"):
                 return
             
             # Create team in database
+            # For managers, captain_discord_id will be None (set later when captain joins)
+            # For captains, captain_discord_id is the current user
+            captain_id = interaction.user.id if self.user_role == 'captain' else None
+            
             team = await db.create_team(
                 team_name=self.team_name,
                 team_tag=self.team_tag,
                 region=self.region,
-                captain_discord_id=interaction.user.id,
+                captain_discord_id=captain_id,
                 logo_url=local_logo_path,  # Store local path instead of Discord URL
                 role_id=team_role.id  # Store the role ID
             )
