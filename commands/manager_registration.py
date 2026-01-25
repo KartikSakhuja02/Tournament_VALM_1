@@ -70,7 +70,7 @@ class ManagerRegistrationButtons(discord.ui.View):
                     return
                 try:
                     thread = interaction.guild.get_thread(thread_id)
-                    if thread and not thread.archived:
+                    if thread and not thread.archived and not thread.locked:
                         await interaction.followup.send(
                             f"❌ You already have an active registration thread: {thread.mention}\n"
                             "Please complete your registration there first.",
@@ -78,7 +78,7 @@ class ManagerRegistrationButtons(discord.ui.View):
                         )
                         return
                     else:
-                        # Thread is archived or doesn't exist, clean up
+                        # Thread is archived, locked, or doesn't exist, clean up
                         del _active_threads[thread_id]
                 except:
                     # Clean up invalid entry
