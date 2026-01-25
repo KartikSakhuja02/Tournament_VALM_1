@@ -423,6 +423,12 @@ class ManagerApprovalView(discord.ui.View):
             # Log to bot logs channel
             await self.log_manager_addition(interaction, applicant, team)
             
+            # Clean up from active threads before deleting
+            if isinstance(interaction.channel, discord.Thread):
+                thread_id = interaction.channel.id
+                if thread_id in _active_threads:
+                    del _active_threads[thread_id]
+            
             # Delete thread after 3 seconds
             await asyncio.sleep(3)
             if isinstance(interaction.channel, discord.Thread):
@@ -483,6 +489,12 @@ class ManagerApprovalView(discord.ui.View):
             "❌ Manager request declined.",
             ephemeral=False
         )
+        
+        # Clean up from active threads before deleting
+        if isinstance(interaction.channel, discord.Thread):
+            thread_id = interaction.channel.id
+            if thread_id in _active_threads:
+                del _active_threads[thread_id]
         
         # Delete thread after 3 seconds
         await asyncio.sleep(3)
