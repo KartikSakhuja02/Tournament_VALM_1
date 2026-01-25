@@ -45,6 +45,32 @@ class TeamRoleSelectView(discord.ui.View):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
+        # Check if user is registered as a player
+        player = await db.get_player_by_discord_id(interaction.user.id)
+        if not player:
+            # Get registration channel ID from env
+            registration_channel_id = os.getenv('REGISTRATION_CHANNEL_ID')
+            registration_mention = f"<#{registration_channel_id}>" if registration_channel_id else "the player registration channel"
+            
+            embed = discord.Embed(
+                title="❌ Player Registration Required",
+                description=(
+                    "To create a team as a **Captain**, you must be registered as a player first.\n\n"
+                    f"Please go to {registration_mention} and register yourself as a player, then come back to create your team.\n\n"
+                    "**Note:** If you want to create a team without being a player, select **I'm a Manager** instead."
+                ),
+                color=discord.Color.red()
+            )
+            embed.set_footer(text="This thread will be deleted in 5 seconds")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=False)
+            
+            # Delete thread after 5 seconds
+            await asyncio.sleep(5)
+            if isinstance(interaction.channel, discord.Thread):
+                await interaction.channel.delete()
+            return
+        
         # Show team name modal with captain role
         modal = TeamNameModal(user_role='captain')
         await interaction.response.send_modal(modal)
@@ -205,50 +231,53 @@ class TeamRegionSelect(discord.ui.Select):
         
         selected_region = self.values[0]
         
-        # Get player's region
-        player = await db.get_player_by_discord_id(interaction.user.id)
-        if not player:
-            await interaction.followup.send(
-                "❌ You must be registered as a player before creating a team.\n"
-                "Please use the player registration first.",
-                ephemeral=False
-            )
-            return
-        
-        player_region = player['region']
-        
-        # Check if regions match (India and AP are considered the same)
-        regions_match = (player_region == selected_region) or \
-                       (player_region == 'India' and selected_region == 'AP') or \
-                       (player_region == 'AP' and selected_region == 'India')
-        
-        if not regions_match:
-            # Show region mismatch confirmation
-            mismatch_view = RegionMismatchView(
-                user_id=self.user_id,
-                team_name=self.team_name,
-                team_tag=self.team_tag,
-                team_region=selected_region,
-                player_region=player_region,
-                user_role=self.user_role
-            )
+        # If user is captain, check player region match
+        if self.user_role == 'captain':
+            # Get player's region
+            player = await db.get_player_by_discord_id(interaction.user.id)
+            if not player:
+                await interaction.followup.send(
+                    "❌ You must be registered as a player before creating a team as captain.\n"
+                    "Please use the player registration first.",
+                    ephemeral=False
+                )
+                return
             
-            embed = discord.Embed(
-                title="⚠️ Region Mismatch Detected",
-                description=(
-                    f"**Your Player Region:** `{player_region}`\n"
-                    f"**Team Region Selected:** `{selected_region}`\n\n"
-                    "You chose a different region for your team than your player registration. "
-                    "This means you will be playing for a team from a different region.\n\n"
-                    "**Do you want to proceed?**"
-                ),
-                color=discord.Color.orange()
-            )
+            player_region = player['region']
             
-            await interaction.followup.send(embed=embed, view=mismatch_view)
-        else:
-            # Regions match, proceed to logo upload
-            await self.show_logo_upload(interaction, selected_region)
+            # Check if regions match (India and AP are considered the same)
+            regions_match = (player_region == selected_region) or \
+                           (player_region == 'India' and selected_region == 'AP') or \
+                           (player_region == 'AP' and selected_region == 'India')
+            
+            if not regions_match:
+                # Show region mismatch confirmation
+                mismatch_view = RegionMismatchView(
+                    user_id=self.user_id,
+                    team_name=self.team_name,
+                    team_tag=self.team_tag,
+                    team_region=selected_region,
+                    player_region=player_region,
+                    user_role=self.user_role
+                )
+                
+                embed = discord.Embed(
+                    title="⚠️ Region Mismatch Detected",
+                    description=(
+                        f"**Your Player Region:** `{player_region}`\n"
+                        f"**Team Region Selected:** `{selected_region}`\n\n"
+                        "You chose a different region for your team than your player registration. "
+                        "This means you will be playing for a team from a different region.\n\n"
+                        "**Do you want to proceed?**"
+                    ),
+                    color=discord.Color.orange()
+                )
+                
+                await interaction.followup.send(embed=embed, view=mismatch_view)
+                return
+        
+        # Proceed to logo upload (for managers or captains with matching regions)
+        await self.show_logo_upload(interaction, selected_region)
     
     async def show_logo_upload(self, interaction: discord.Interaction, region: str):
         """Show logo upload instructions"""
