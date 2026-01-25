@@ -1049,12 +1049,62 @@ class RegistrationButtons(discord.ui.View):
             )
             return
         
-        # Show user search view
-        await interaction.response.send_message(
-            "Please search for the player you want to register:",
-            view=PlayerSearchView(requester_id=interaction.user.id, all_teams=all_teams),
-            ephemeral=True
-        )
+        # Respond and defer
+        await interaction.response.defer(ephemeral=True)
+        
+        # Create private thread
+        try:
+            thread = await interaction.channel.create_thread(
+                name=f"Player Registration - {interaction.user.name}",
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60
+            )
+            
+            # Add requester to thread
+            await thread.add_user(interaction.user)
+            
+            # Add staff members (admins always, headmods only if online)
+            await add_staff_to_thread(thread, interaction.guild)
+            
+            # Send confirmation
+            await interaction.followup.send(
+                f"✅ Private thread created: {thread.mention}",
+                ephemeral=True
+            )
+            
+            # Send message asking to ping the player
+            team_names = ", ".join([f"**{team['team_name']}**" for team in all_teams])
+            
+            prompt_embed = discord.Embed(
+                title="Player Registration (Manager/Captain Assisted)",
+                description=(
+                    f"Hello {interaction.user.mention}!\n\n"
+                    f"You are registering a player as Manager/Captain of {team_names}.\n\n"
+                    "**Please tag/mention the player you want to register.**\n"
+                    "Example: @username"
+                ),
+                color=discord.Color.blue()
+            )
+            prompt_embed.set_footer(text="Tag the player in this thread to continue")
+            
+            await thread.send(embed=prompt_embed)
+            
+            # Store thread info to track player mention
+            _active_threads[thread.id] = {
+                'task': None,
+                'target_user_id': None,  # Will be set when player is mentioned
+                'awaiting_player_mention': True,
+                'requester_id': interaction.user.id,
+                'all_teams': all_teams
+            }
+            print(f"✓ Created assisted registration thread {thread.id}, awaiting player mention")
+            
+        except Exception as e:
+            print(f"Error creating registration thread: {e}")
+            await interaction.followup.send(
+                f"❌ Failed to create registration thread: {e}",
+                ephemeral=True
+            )
     
     @discord.ui.button(
         label="Check Notification Status",
@@ -1209,6 +1259,111 @@ class RegistrationCog(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
+    
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Listen for player mentions in assisted registration threads"""
+        # Ignore bot messages
+        if message.author.bot:
+            return
+        
+        # Check if message is in a thread
+        if not isinstance(message.channel, discord.Thread):
+            return
+        
+        # Check if this thread is awaiting a player mention
+        thread_id = message.channel.id
+        if thread_id not in _active_threads:
+            return
+        
+        thread_data = _active_threads[thread_id]
+        if not thread_data.get('awaiting_player_mention'):
+            return
+        
+        # Check if message is from the requester
+        if message.author.id != thread_data.get('requester_id'):
+            return
+        
+        # Check if message has mentions
+        if not message.mentions:
+            await message.channel.send(
+                "❌ Please mention/tag a user. Example: @username",
+                delete_after=5
+            )
+            return
+        
+        # Get the first mentioned user
+        target_user = message.mentions[0]
+        
+        # Check if target user is already registered
+        existing_player = await db.get_player_by_discord_id(target_user.id)
+        if existing_player:
+            await message.channel.send(
+                f"❌ {target_user.mention} is already registered!\n"
+                f"**IGN:** `{existing_player['ign']}`\n"
+                f"**Region:** `{existing_player['region']}`"
+            )
+            # Clean up thread data
+            del _active_threads[thread_id]
+            await asyncio.sleep(5)
+            await message.channel.delete()
+            return
+        
+        # Check if target user has another active thread
+        for tid, tdata in list(_active_threads.items()):
+            if tid != thread_id and tdata.get('target_user_id') == target_user.id:
+                try:
+                    other_thread = message.guild.get_thread(tid)
+                    if other_thread and not other_thread.archived:
+                        await message.channel.send(
+                            f"❌ {target_user.mention} already has an active registration thread: {other_thread.mention}"
+                        )
+                        del _active_threads[thread_id]
+                        await asyncio.sleep(5)
+                        await message.channel.delete()
+                        return
+                except:
+                    pass
+        
+        # Add target user to thread
+        try:
+            await message.channel.add_user(target_user)
+        except:
+            pass
+        
+        # Update thread data
+        thread_data['target_user_id'] = target_user.id
+        thread_data['awaiting_player_mention'] = False
+        
+        # Send welcome message
+        all_teams = thread_data['all_teams']
+        team_names = ", ".join([f"**{team['team_name']}**" for team in all_teams])
+        
+        welcome_embed = discord.Embed(
+            title="Player Registration (Manager/Captain Assisted)",
+            description=(
+                f"Hey {target_user.mention}!\n\n"
+                f"{message.author.mention} (Manager/Captain of {team_names}) is helping you register for the tournament.\n\n"
+                "Either you or the manager/captain can fill out the registration form by clicking the button below."
+            ),
+            color=discord.Color.green()
+        )
+        welcome_embed.set_footer(text="Click 'Fill Form' to continue")
+        
+        # Create view with form button
+        form_view = AssistedRegistrationView(
+            target_user_id=target_user.id,
+            requester_id=message.author.id,
+            all_teams=all_teams
+        )
+        
+        await message.channel.send(embed=welcome_embed, view=form_view)
+        
+        # Start inactivity warning task
+        task = asyncio.create_task(inactivity_warning_task(message.channel, target_user.id))
+        thread_data['task'] = task
+        
+        print(f"✓ Player {target_user.name} mentioned in thread {thread_id}, starting registration")
     
     def create_registration_embed(self):
         """Create the registration embed message"""
