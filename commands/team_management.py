@@ -675,9 +675,9 @@ class TeamInviteResponseView(discord.ui.View):
             # Assign team role to player
             if team and team.get('role_id'):
                 try:
-                    role = interaction.guild.get_role(team['role_id'])
+                    role = self.guild.get_role(team['role_id'])
                     if role:
-                        member = interaction.guild.get_member(interaction.user.id)
+                        member = self.guild.get_member(interaction.user.id)
                         if member:
                             await member.add_roles(role)
                             print(f"✓ Assigned role {role.name} to {member.name}")
@@ -689,9 +689,9 @@ class TeamInviteResponseView(discord.ui.View):
                 try:
                     captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
                     if captain_role_id:
-                        captain_role = interaction.guild.get_role(int(captain_role_id))
+                        captain_role = self.guild.get_role(int(captain_role_id))
                         if captain_role:
-                            member = interaction.guild.get_member(interaction.user.id)
+                            member = self.guild.get_member(interaction.user.id)
                             if member:
                                 await member.add_roles(captain_role)
                                 print(f"✓ Assigned Captain role to {member.name}")
@@ -720,12 +720,16 @@ class TeamInviteResponseView(discord.ui.View):
             try:
                 inviter = self.guild.get_member(self.inviter_id)
                 if inviter:
+                    notify_message = f"{interaction.user.mention} has accepted your invite!\n"
+                    
+                    if player_role == 'captain':
+                        notify_message += f"🎖️ They are now the **captain** of **{self.team_name}**!"
+                    else:
+                        notify_message += f"They are now a member of **{self.team_name}**."
+                    
                     notify_embed = discord.Embed(
                         title="Team Invite Accepted",
-                        description=(
-                            f"{interaction.user.mention} has accepted your invite!\n"
-                            f"They are now a member of **{self.team_name}**."
-                        ),
+                        description=notify_message,
                         color=discord.Color.green()
                     )
                     await inviter.send(embed=notify_embed)
