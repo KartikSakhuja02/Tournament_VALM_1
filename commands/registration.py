@@ -821,7 +821,7 @@ class RegistrationButtons(discord.ui.View):
         self.cog = cog
     
     @discord.ui.button(
-        label="Register",
+        label="Register for yourself",
         style=discord.ButtonStyle.primary,
         custom_id="register"
     )
@@ -945,7 +945,7 @@ class RegistrationButtons(discord.ui.View):
                 pass
     
     @discord.ui.button(
-        label="Register Your Player",
+        label="Register for someone",
         style=discord.ButtonStyle.success,
         custom_id="register_player_as_manager"
     )
