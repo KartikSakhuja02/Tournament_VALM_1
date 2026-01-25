@@ -14,10 +14,28 @@ class TeamManagementCog(commands.Cog):
     
     @app_commands.command(name="invite", description="Invite a player to your team")
     @app_commands.describe(player="The player to invite to your team")
-    @commands_channel_only()
     async def invite_player(self, interaction: discord.Interaction, player: discord.Member):
         """Invite a player to join your team"""
         await interaction.response.defer(ephemeral=True)
+        
+        # Check if user has Captain or Manager role
+        captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+        manager_role_id = os.getenv('MANAGER_ROLE_ID')
+        
+        user_role_ids = [role.id for role in interaction.user.roles]
+        has_permission = False
+        
+        if captain_role_id and int(captain_role_id) in user_role_ids:
+            has_permission = True
+        if manager_role_id and int(manager_role_id) in user_role_ids:
+            has_permission = True
+        
+        if not has_permission:
+            await interaction.followup.send(
+                "❌ You need the Captain or Manager role to use this command.",
+                ephemeral=True
+            )
+            return
         
         # Check if user is a captain or manager of any team
         manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
@@ -142,7 +160,6 @@ class TeamManagementCog(commands.Cog):
             )
     
     @app_commands.command(name="leave", description="Leave one of your teams")
-    @commands_channel_only()
     async def leave_team(self, interaction: discord.Interaction):
         """Leave a team you're part of"""
         await interaction.response.defer(ephemeral=True)
@@ -219,10 +236,28 @@ class TeamManagementCog(commands.Cog):
     
     @app_commands.command(name="kick", description="Kick a player from your team")
     @app_commands.describe(player="The player to kick from your team")
-    @commands_channel_only()
     async def kick_player(self, interaction: discord.Interaction, player: discord.Member):
         """Kick a player from your team"""
         await interaction.response.defer(ephemeral=True)
+        
+        # Check if user has Captain or Manager role
+        captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+        manager_role_id = os.getenv('MANAGER_ROLE_ID')
+        
+        user_role_ids = [role.id for role in interaction.user.roles]
+        has_permission = False
+        
+        if captain_role_id and int(captain_role_id) in user_role_ids:
+            has_permission = True
+        if manager_role_id and int(manager_role_id) in user_role_ids:
+            has_permission = True
+        
+        if not has_permission:
+            await interaction.followup.send(
+                "❌ You need the Captain or Manager role to use this command.",
+                ephemeral=True
+            )
+            return
         
         # Check if user is a captain or manager
         manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
@@ -408,10 +443,28 @@ class TeamManagementCog(commands.Cog):
             print(f"Error logging kick: {e}")
     
     @app_commands.command(name="disband", description="Disband your team")
-    @commands_channel_only()
     async def disband_team(self, interaction: discord.Interaction):
         """Disband a team (captain or manager only)"""
         await interaction.response.defer(ephemeral=True)
+        
+        # Check if user has Captain or Manager role
+        captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+        manager_role_id = os.getenv('MANAGER_ROLE_ID')
+        
+        user_role_ids = [role.id for role in interaction.user.roles]
+        has_permission = False
+        
+        if captain_role_id and int(captain_role_id) in user_role_ids:
+            has_permission = True
+        if manager_role_id and int(manager_role_id) in user_role_ids:
+            has_permission = True
+        
+        if not has_permission:
+            await interaction.followup.send(
+                "❌ You need the Captain or Manager role to use this command.",
+                ephemeral=True
+            )
+            return
         
         # Check if user is a captain or manager
         manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
@@ -480,10 +533,22 @@ class TeamManagementCog(commands.Cog):
         )
     
     @app_commands.command(name="transfer-captainship", description="Transfer team captainship to another member (/transfer-captainship)")
-    @commands_channel_only()
     async def transfer_captainship(self, interaction: discord.Interaction):
         """Transfer captainship to another team member"""
         await interaction.response.defer(ephemeral=True)
+        
+        # Check if user has Captain role
+        captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+        
+        user_role_ids = [role.id for role in interaction.user.roles]
+        has_captain_role = captain_role_id and int(captain_role_id) in user_role_ids
+        
+        if not has_captain_role:
+            await interaction.followup.send(
+                "❌ You need the Captain role to use this command.",
+                ephemeral=True
+            )
+            return
         
         # Check if user is a captain
         captain_teams = await db.get_user_teams_by_role(interaction.user.id, 'captain')
