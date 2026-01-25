@@ -828,10 +828,31 @@ class TeamRegistrationCog(commands.Cog):
             inline=False
         )
         
+        # Team Management section
+        embed.add_field(
+            name="Team Management Features:",
+            value=(
+                "**As Captain, you can:**\n"
+                "• Invite players to your team (`/invite-player`)\n"
+                "• Kick players from your team (`/kick-player`)\n"
+                "• Transfer captainship to another member\n"
+                "• Approve/Reject manager and coach applications\n"
+                "• Disband the team (`/disband-team`)\n\n"
+                "**As Manager, you can:**\n"
+                "• Invite players to the team\n"
+                "• Register players for the team\n"
+                "• Leave the team anytime\n\n"
+                "**All team members receive:**\n"
+                "• A unique team role\n"
+                "• Access to team-specific features"
+            ),
+            inline=False
+        )
+        
         # Captain note
         embed.add_field(
             name="",
-            value="**You will become the team captain!**",
+            value="**You will become the team captain or manager upon creation!**",
             inline=False
         )
         

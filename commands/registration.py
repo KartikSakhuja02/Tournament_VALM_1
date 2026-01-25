@@ -1130,13 +1130,27 @@ class RegistrationCog(commands.Cog):
         """Create the registration embed message"""
         embed = discord.Embed(
             title="VALORANT Tournament Registration",
-            description="Welcome to the Bot! Click the button below to register for the tournament.",
+            description="Welcome to the Bot! Register yourself or let your team's leadership help you join.",
             color=discord.Color.red()  # VALORANT red theme
         )
         
         embed.add_field(
-            name="Registration Requirements",
-            value="• IGN (In-Game Name)\n• Player ID\n• Region",
+            name="Registration Options:",
+            value=(
+                "**Register for Yourself:**\n"
+                "• Click the button below to register yourself\n"
+                "• Provide your IGN, Player ID, and Region\n\n"
+                "**Register for Someone (Team Leadership):**\n"
+                "• Captains and Managers can register players for their team\n"
+                "• Requires Captain or Manager role\n"
+                "• Player will automatically join your team"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Registration Requirements:",
+            value="• IGN (In-Game Name)\n• Player ID\n• Region\n• Main Agent",
             inline=False
         )
         
