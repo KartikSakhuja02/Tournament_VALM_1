@@ -58,9 +58,16 @@ class CoachRegistrationButtons(discord.ui.View):
             )
             return
         
-        # Check if user already has an active coach registration thread
+        # Check if user already has an active coach registration thread (including temp placeholders)
         for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:
+                # Check if it's a real thread or temp placeholder
+                if str(thread_id).startswith('temp_'):
+                    await interaction.followup.send(
+                        "⏳ Your registration is already being processed. Please wait...",
+                        ephemeral=True
+                    )
+                    return
                 try:
                     thread = interaction.guild.get_thread(thread_id)
                     if thread and not thread.archived:

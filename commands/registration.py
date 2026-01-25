@@ -864,28 +864,20 @@ class RegistrationButtons(discord.ui.View):
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle registration button click"""
-        # Respond immediately to prevent timeout
-        await interaction.response.defer(ephemeral=True)
-        
-        # Check if user is already registered
-        existing_player = await db.get_player_by_discord_id(interaction.user.id)
-        if existing_player:
-            await interaction.followup.send(
-                f"❌ You are already registered!\n"
-                f"**IGN:** `{existing_player['ign']}`\n"
-                f"**Region:** `{existing_player['region']}`\n\n"
-                "If you need to update your information, please contact an administrator.",
-                ephemeral=True
-            )
-            return
-        
-        # Check if user already has an active registration thread
+        # Check if user already has an active registration thread (including temp placeholders)
         for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:
+                # Check if it's a real thread or temp placeholder
+                if str(thread_id).startswith('temp_'):
+                    await interaction.response.send_message(
+                        "⏳ Your registration is already being processed. Please wait...",
+                        ephemeral=True
+                    )
+                    return
                 try:
                     thread = interaction.guild.get_thread(thread_id)
                     if thread and not thread.archived:
-                        await interaction.followup.send(
+                        await interaction.response.send_message(
                             f"❌ You already have an active registration thread: {thread.mention}\n"
                             "Please complete your registration there first.",
                             ephemeral=True
@@ -904,6 +896,24 @@ class RegistrationButtons(discord.ui.View):
             'task': None,
             'target_user_id': interaction.user.id
         }
+        
+        # Respond immediately to prevent timeout
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check if user is already registered
+        existing_player = await db.get_player_by_discord_id(interaction.user.id)
+        if existing_player:
+            # Clean up temp placeholder
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
+            await interaction.followup.send(
+                f"❌ You are already registered!\n"
+                f"**IGN:** `{existing_player['ign']}`\n"
+                f"**Region:** `{existing_player['region']}`\n\n"
+                "If you need to update your information, please contact an administrator.",
+                ephemeral=True
+            )
+            return
         
         # Create private thread
         try:

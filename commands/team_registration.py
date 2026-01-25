@@ -754,16 +754,20 @@ class TeamRegistrationButtons(discord.ui.View):
     )
     async def register_team(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle team registration button click"""
-        # Respond immediately to prevent timeout
-        await interaction.response.defer(ephemeral=True)
-        
-        # Check if user already has an active team registration thread
+        # Check if user already has an active team registration thread (including temp placeholders)
         for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:
+                # Check if it's a real thread or temp placeholder
+                if str(thread_id).startswith('temp_'):
+                    await interaction.response.send_message(
+                        "⏳ Your team registration is already being processed. Please wait...",
+                        ephemeral=True
+                    )
+                    return
                 try:
                     thread = interaction.guild.get_thread(thread_id)
                     if thread and not thread.archived:
-                        await interaction.followup.send(
+                        await interaction.response.send_message(
                             f"❌ You already have an active team registration thread: {thread.mention}\n"
                             "Please complete your registration there first.",
                             ephemeral=True
@@ -782,6 +786,9 @@ class TeamRegistrationButtons(discord.ui.View):
             'task': None,
             'target_user_id': interaction.user.id
         }
+        
+        # Respond immediately to prevent timeout
+        await interaction.response.defer(ephemeral=True)
         
         # Create private thread
         try:
