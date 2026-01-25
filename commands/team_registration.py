@@ -505,6 +505,14 @@ class LogoConfirmationView(discord.ui.View):
         # Close thread after delay
         await asyncio.sleep(5)
         if isinstance(interaction.channel, discord.Thread):
+            # Clean up from active threads before deleting
+            thread_id = interaction.channel.id
+            if thread_id in _active_threads:
+                del _active_threads[thread_id]
+            # Also clean up any temp placeholders for this user
+            for key in list(_active_threads.keys()):
+                if isinstance(key, str) and key.startswith(f"temp_{self.user_id}_"):
+                    del _active_threads[key]
             await interaction.channel.delete()
     
     @discord.ui.button(label="❌ Reject", style=discord.ButtonStyle.danger)
@@ -558,19 +566,8 @@ class TeamLogoUploadView(discord.ui.View):
             try:
                 msg = await interaction.client.wait_for('message', timeout=300.0, check=check)  # 5 minutes
                 
-                # If message has mentions, add them to thread
-                if msg.mentions and len(msg.attachments) == 0:
-                    for mentioned_user in msg.mentions:
-                        if mentioned_user.bot:
-                            continue
-                        try:
-                            await thread.add_user(mentioned_user)
-                            await thread.send(f"✅ Added {mentioned_user.mention} to the thread! They can now upload the logo.")
-                        except:
-                            await thread.send(f"❌ Couldn't add {mentioned_user.mention} to the thread.")
-                    continue  # Go back to waiting for an image
-                
-                # If message has attachment
+                # Check for attachments FIRST (priority over mentions)
+                # If message has both attachment and mention, process attachment
                 if len(msg.attachments) > 0:
                     attachment = msg.attachments[0]
                     
@@ -616,6 +613,18 @@ class TeamLogoUploadView(discord.ui.View):
                         # Timeout
                         await thread.send("⏱️ Confirmation timed out. Please send the logo again.")
                         continue
+                
+                # If message has mentions but no attachments, add them to thread
+                elif msg.mentions:
+                    for mentioned_user in msg.mentions:
+                        if mentioned_user.bot:
+                            continue
+                        try:
+                            await thread.add_user(mentioned_user)
+                            await thread.send(f"✅ Added {mentioned_user.mention} to the thread! They can now upload the logo.")
+                        except:
+                            await thread.send(f"❌ Couldn't add {mentioned_user.mention} to the thread.")
+                    continue  # Go back to waiting for an image
                         
             except asyncio.TimeoutError:
                 await thread.send(
@@ -624,6 +633,12 @@ class TeamLogoUploadView(discord.ui.View):
                 )
                 # Complete registration without logo
                 await self.complete_registration_without_logo(interaction)
+                # Clean up from active threads
+                if thread.id in _active_threads:
+                    del _active_threads[thread.id]
+                for key in list(_active_threads.keys()):
+                    if isinstance(key, str) and key.startswith(f"temp_{self.user_id}_"):
+                        del _active_threads[key]
                 return
     
     async def complete_registration_without_logo(self, interaction: discord.Interaction):
@@ -789,6 +804,14 @@ class TeamLogoUploadView(discord.ui.View):
         # Close thread after 5 seconds
         await asyncio.sleep(5)
         if isinstance(interaction.channel, discord.Thread):
+            # Clean up from active threads before deleting
+            thread_id = interaction.channel.id
+            if thread_id in _active_threads:
+                del _active_threads[thread_id]
+            # Also clean up any temp placeholders for this user
+            for key in list(_active_threads.keys()):
+                if isinstance(key, str) and key.startswith(f"temp_{self.user_id}_"):
+                    del _active_threads[key]
             await interaction.channel.delete()
     
     async def log_team_registration_no_logo(self, interaction: discord.Interaction, team: dict, role_text: str):
