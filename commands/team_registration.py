@@ -758,7 +758,7 @@ class TeamRegistrationButtons(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         # Check if user already has an active team registration thread
-        for thread_id, thread_data in _active_threads.items():
+        for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:
                 try:
                     thread = interaction.guild.get_thread(thread_id)
@@ -769,8 +769,19 @@ class TeamRegistrationButtons(discord.ui.View):
                             ephemeral=True
                         )
                         return
+                    else:
+                        # Thread is archived or doesn't exist, clean up
+                        del _active_threads[thread_id]
                 except:
-                    pass
+                    # Clean up invalid entry
+                    del _active_threads[thread_id]
+        
+        # Add placeholder to prevent duplicate thread creation during rapid clicks
+        temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+        _active_threads[temp_id] = {
+            'task': None,
+            'target_user_id': interaction.user.id
+        }
         
         # Create private thread
         try:
@@ -810,6 +821,12 @@ class TeamRegistrationButtons(discord.ui.View):
             
             # Start inactivity warning task
             task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
+            
+            # Remove temp placeholder and add actual thread
+            temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
+            
             _active_threads[thread.id] = {
                 'task': task,
                 'target_user_id': interaction.user.id
@@ -818,6 +835,10 @@ class TeamRegistrationButtons(discord.ui.View):
             
         except Exception as e:
             print(f"Error creating team registration thread: {e}")
+            # Clean up temp placeholder
+            temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
             await interaction.followup.send(
                 f"❌ Failed to create registration thread: {e}",
                 ephemeral=True

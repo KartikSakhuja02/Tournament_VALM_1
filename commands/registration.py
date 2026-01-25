@@ -669,7 +669,7 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             return
         
         # Check if target user already has an active registration thread
-        for thread_id, thread_data in _active_threads.items():
+        for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == target_user.id:
                 try:
                     thread = interaction.guild.get_thread(thread_id)
@@ -680,8 +680,19 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
                             ephemeral=True
                         )
                         return
+                    else:
+                        # Thread is archived or doesn't exist, clean up
+                        del _active_threads[thread_id]
                 except:
-                    pass
+                    # Clean up invalid entry
+                    del _active_threads[thread_id]
+        
+        # Add placeholder to prevent duplicate thread creation during rapid clicks
+        temp_id = f"temp_{target_user.id}_{interaction.id}"
+        _active_threads[temp_id] = {
+            'task': None,
+            'target_user_id': target_user.id
+        }
         
         # Create private thread
         try:
@@ -723,6 +734,12 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             
             # Start inactivity warning task
             task = asyncio.create_task(inactivity_warning_task(thread, target_user.id))
+            
+            # Remove temp placeholder and add actual thread
+            temp_id = f"temp_{target_user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
+            
             _active_threads[thread.id] = {
                 'task': task,
                 'target_user_id': target_user.id
@@ -739,6 +756,11 @@ class PlayerSearchModal(discord.ui.Modal, title="Search for Player"):
             print(f"Error creating registration thread: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Clean up temp placeholder
+            temp_id = f"temp_{target_user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
             
             await interaction.followup.send(
                 "❌ An error occurred creating the thread. Please try again later.",
@@ -858,7 +880,7 @@ class RegistrationButtons(discord.ui.View):
             return
         
         # Check if user already has an active registration thread
-        for thread_id, thread_data in _active_threads.items():
+        for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:
                 try:
                     thread = interaction.guild.get_thread(thread_id)
@@ -869,8 +891,19 @@ class RegistrationButtons(discord.ui.View):
                             ephemeral=True
                         )
                         return
+                    else:
+                        # Thread is archived or doesn't exist, clean up
+                        del _active_threads[thread_id]
                 except:
-                    pass
+                    # Clean up invalid entry
+                    del _active_threads[thread_id]
+        
+        # Add placeholder to prevent duplicate thread creation during rapid clicks
+        temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+        _active_threads[temp_id] = {
+            'task': None,
+            'target_user_id': interaction.user.id
+        }
         
         # Create private thread
         try:
@@ -948,6 +981,12 @@ class RegistrationButtons(discord.ui.View):
             
             # Start inactivity warning task
             task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
+            
+            # Remove temp placeholder and add actual thread
+            temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
+            
             _active_threads[thread.id] = {
                 'task': task,
                 'target_user_id': interaction.user.id
@@ -964,6 +1003,11 @@ class RegistrationButtons(discord.ui.View):
             print(f"Error creating registration thread: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Clean up temp placeholder
+            temp_id = f"temp_{interaction.user.id}_{interaction.id}"
+            if temp_id in _active_threads:
+                del _active_threads[temp_id]
             
             try:
                 await interaction.followup.send(
