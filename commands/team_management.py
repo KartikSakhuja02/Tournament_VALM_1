@@ -653,12 +653,15 @@ class TeamInviteResponseView(discord.ui.View):
                 )
                 return
             
-            # Check if this team has a captain yet
+            # Check if this team has a captain yet (check both database and actual player members)
             team = await db.get_team_by_id(self.team_id)
             has_captain = team.get('captain_discord_id') is not None
-            is_first_player = len(team_members) == 0
             
-            # Determine role: first player becomes captain, others are regular players
+            # Check if there are any players/captains already (exclude managers and coaches)
+            player_members = [m for m in team_members if m['role'] in ['player', 'captain']]
+            is_first_player = len(player_members) == 0
+            
+            # Determine role: first invited player becomes captain, others are regular players
             player_role = 'captain' if (is_first_player and not has_captain) else 'player'
             
             # Add player to team
