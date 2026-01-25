@@ -13,9 +13,23 @@ class TeamManagementCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
-    @app_commands.command(name="invite", description="Invite one or more players to your team")
-    @app_commands.describe(players="The players to invite (mention them: @player1 @player2 ...)")
-    async def invite_player(self, interaction: discord.Interaction, players: str):
+    @app_commands.command(name="invite", description="Invite players to your team (up to 5 at once)")
+    @app_commands.describe(
+        player1="First player to invite",
+        player2="Second player to invite (optional)",
+        player3="Third player to invite (optional)",
+        player4="Fourth player to invite (optional)",
+        player5="Fifth player to invite (optional)"
+    )
+    async def invite_player(
+        self, 
+        interaction: discord.Interaction, 
+        player1: discord.Member,
+        player2: discord.Member = None,
+        player3: discord.Member = None,
+        player4: discord.Member = None,
+        player5: discord.Member = None
+    ):
         """Invite one or more players to join your team"""
         await interaction.response.defer(ephemeral=True)
         
@@ -52,29 +66,12 @@ class TeamManagementCog(commands.Cog):
             )
             return
         
-        # Parse mentions from the input
-        # Discord mentions are in format <@USER_ID> or <@!USER_ID>
-        mention_pattern = r'<@!?(\d+)>'
-        user_ids = re.findall(mention_pattern, players)
-        
-        if not user_ids:
-            await interaction.followup.send(
-                "❌ Please mention at least one player to invite.\n"
-                "Example: `/invite @player1 @player2 @player3`",
-                ephemeral=True
-            )
-            return
-        
-        # Get member objects for all mentioned users
-        mentioned_members = []
-        for user_id in user_ids:
-            member = interaction.guild.get_member(int(user_id))
-            if member:
-                mentioned_members.append(member)
+        # Collect all non-None players
+        mentioned_members = [p for p in [player1, player2, player3, player4, player5] if p is not None]
         
         if not mentioned_members:
             await interaction.followup.send(
-                "❌ Could not find any valid members to invite.",
+                "❌ Please select at least one player to invite.",
                 ephemeral=True
             )
             return
