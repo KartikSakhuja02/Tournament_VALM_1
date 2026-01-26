@@ -630,7 +630,6 @@ class EditTeamFieldSelect(discord.ui.Select):
                             logo_data = await resp.read()
                             
                             # Save to file (local backup)
-                            import os
                             os.makedirs('team_logos', exist_ok=True)
                             filename = f"team_logos/{self.team_data['team_name'].replace(' ', '_')}.png"
                             with open(filename, 'wb') as f:
@@ -646,7 +645,6 @@ class EditTeamFieldSelect(discord.ui.Select):
                                 storage_channel = interaction.guild.get_channel(int(logo_storage_channel_id))
                                 if storage_channel:
                                     # Upload the saved file to get a permanent URL
-                                    import discord
                                     logo_file = discord.File(filename, filename=f"{self.team_data['team_name'].replace(' ', '_')}.png")
                                     storage_message = await storage_channel.send(
                                         f"Logo for team: **{self.team_data['team_name']}** (Admin Edit)",
