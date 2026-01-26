@@ -3210,11 +3210,14 @@ class DeleteTeamConfirmView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            # Sync commands to the current guild ONLY (instant, no duplicates)
+            # Sync commands to the current guild (faster)
             synced_guild = await self.bot.tree.sync(guild=interaction.guild)
             
-            # Get all registered commands for this guild
-            all_commands = self.bot.tree.get_commands(guild=interaction.guild)
+            # Sync commands globally (takes up to 1 hour to propagate)
+            synced_global = await self.bot.tree.sync()
+            
+            # Get all registered commands
+            all_commands = self.bot.tree.get_commands()
             
             embed = discord.Embed(
                 title="✅ Commands Synced Successfully",
@@ -3224,7 +3227,13 @@ class DeleteTeamConfirmView(discord.ui.View):
             
             embed.add_field(
                 name="📍 Guild Sync (Instant)",
-                value=f"Synced **{len(synced_guild)}** commands to this server.\nAll commands are available immediately!",
+                value=f"Synced **{len(synced_guild)}** commands to this server.\nThey are available immediately!",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🌍 Global Sync",
+                value=f"Synced **{len(synced_global)}** commands globally.\nMay take up to 1 hour to appear everywhere.",
                 inline=False
             )
             
@@ -3243,7 +3252,7 @@ class DeleteTeamConfirmView(discord.ui.View):
             embed.set_footer(text=f"Synced by {interaction.user.name}")
             
             await interaction.followup.send(embed=embed, ephemeral=True)
-            print(f"✓ Commands synced to guild: {len(synced_guild)} commands")
+            print(f"✓ Commands synced: {len(synced_guild)} guild, {len(synced_global)} global")
             
         except discord.HTTPException as e:
             error_embed = discord.Embed(
