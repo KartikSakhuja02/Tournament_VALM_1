@@ -513,8 +513,8 @@ class EditTeamSelect(discord.ui.Select):
         )
         info_embed.set_footer(text="Select a field below to edit")
         
-        # If logo_url exists, set as thumbnail
-        if team_dict['logo_url']:
+        # If logo_url exists and is a valid URL, set as thumbnail
+        if team_dict['logo_url'] and (team_dict['logo_url'].startswith('http://') or team_dict['logo_url'].startswith('https://')):
             info_embed.set_thumbnail(url=team_dict['logo_url'])
         
         # Create view with field selection dropdown
