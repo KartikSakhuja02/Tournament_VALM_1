@@ -579,7 +579,134 @@ class EditTeamFieldSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         field = self.values[0]
         
-        # For now, just show a modal for text input
+        # Special handling for logo - ask for image upload
+        if field == "logo_url":
+            await interaction.response.defer(ephemeral=True)
+            
+            embed = discord.Embed(
+                title="📸 Upload Team Logo",
+                description=(
+                    f"Editing logo for: **{self.team_data['team_name']}**\n\n"
+                    "Please upload the team logo image in your next message.\n\n"
+                    "**Requirements:**\n"
+                    "• Must be an image file (PNG, JPG, JPEG, GIF)\n"
+                    "• Recommended size: 512x512 pixels\n\n"
+                    "⏱️ You have **5 minutes** to upload."
+                ),
+                color=discord.Color.blue()
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+            # Wait for image upload (5 minutes)
+            def check(m):
+                return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.attachments) > 0
+            
+            try:
+                import aiohttp
+                
+                bot = interaction.client
+                message = await bot.wait_for('message', timeout=300.0, check=check)
+                
+                # Get the first attachment
+                attachment = message.attachments[0]
+                
+                # Validate it's an image
+                valid_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+                file_ext = attachment.filename.split('.')[-1].lower()
+                
+                if f'.{file_ext}' not in valid_extensions:
+                    await interaction.followup.send(
+                        "❌ Please upload a valid image file (PNG, JPG, JPEG, GIF, or WEBP).",
+                        ephemeral=True
+                    )
+                    await message.delete()
+                    return
+                
+                # Download and save the logo
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as resp:
+                        if resp.status == 200:
+                            logo_data = await resp.read()
+                            
+                            # Save to file (local backup)
+                            import os
+                            os.makedirs('team_logos', exist_ok=True)
+                            filename = f"team_logos/{self.team_data['team_name'].replace(' ', '_')}.png"
+                            with open(filename, 'wb') as f:
+                                f.write(logo_data)
+                            
+                            # Upload to permanent Discord storage channel
+                            logo_storage_channel_id = os.getenv('LOGO_STORAGE_CHANNEL_ID')
+                            if not logo_storage_channel_id:
+                                logo_storage_channel_id = os.getenv('BOT_LOGS_CHANNEL_ID')
+                            
+                            logo_url = None
+                            if logo_storage_channel_id:
+                                storage_channel = interaction.guild.get_channel(int(logo_storage_channel_id))
+                                if storage_channel:
+                                    # Upload the saved file to get a permanent URL
+                                    import discord
+                                    logo_file = discord.File(filename, filename=f"{self.team_data['team_name'].replace(' ', '_')}.png")
+                                    storage_message = await storage_channel.send(
+                                        f"Logo for team: **{self.team_data['team_name']}** (Admin Edit)",
+                                        file=logo_file
+                                    )
+                                    # Get the permanent URL from the uploaded attachment
+                                    if storage_message.attachments:
+                                        logo_url = storage_message.attachments[0].url
+                            
+                            # Delete user's message
+                            await message.delete()
+                            
+                            if logo_url:
+                                # Update database
+                                await db.pool.execute(
+                                    "UPDATE teams SET logo_url = $1, updated_at = NOW() WHERE id = $2",
+                                    logo_url, self.team_data['id']
+                                )
+                                
+                                # Send confirmation
+                                confirm_embed = discord.Embed(
+                                    title="✅ Team Logo Updated",
+                                    description=f"Successfully updated logo for **{self.team_data['team_name']}**",
+                                    color=discord.Color.green()
+                                )
+                                confirm_embed.set_thumbnail(url=logo_url)
+                                confirm_embed.add_field(name="Old Logo", value=self.team_data['logo_url'] or 'Not set', inline=False)
+                                confirm_embed.add_field(name="New Logo", value="See thumbnail above", inline=False)
+                                
+                                await interaction.followup.send(embed=confirm_embed, ephemeral=True)
+                            else:
+                                await interaction.followup.send(
+                                    "⚠️ Logo saved locally but couldn't upload to storage channel.",
+                                    ephemeral=True
+                                )
+                        else:
+                            await interaction.followup.send(
+                                "❌ Failed to download the logo.",
+                                ephemeral=True
+                            )
+                
+            except asyncio.TimeoutError:
+                await interaction.followup.send(
+                    "❌ Timeout: No image uploaded within 5 minutes.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                import traceback
+                error_embed = discord.Embed(
+                    title="❌ Error Uploading Logo",
+                    description=f"Failed to upload logo: {str(e)}",
+                    color=discord.Color.red()
+                )
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                print(f"❌ Error uploading team logo:")
+                print(traceback.format_exc())
+            
+            return
+        
+        # For other fields, show modal for text input
         modal = EditTeamValueModal(
             field=field,
             current_value=self.team_data[field] or "",
