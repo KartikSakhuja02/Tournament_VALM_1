@@ -2180,6 +2180,226 @@ class DeleteTeamConfirmView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
+class Admin(commands.Cog):
+    """Admin commands for managing the tournament."""
+    
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+    
+    @app_commands.command(
+        name="admin-all-teams",
+        description="[ADMIN] View all registered teams"
+    )
+    async def admin_all_teams(self, interaction: discord.Interaction):
+        """Display all registered teams with basic information."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "📋 No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title="🏆 All Registered Teams",
+            description=f"Total Teams: **{len(all_teams)}**",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow()
+        )
+        
+        # Group teams by region
+        regions = {}
+        for team in all_teams:
+            region = team['region']
+            if region not in regions:
+                regions[region] = []
+            regions[region].append(team)
+        
+        # Add field for each region
+        for region, teams in sorted(regions.items()):
+            team_list = []
+            for team in teams:
+                # Get member count
+                members = await db.get_team_members(team['id'])
+                member_count = len(members)
+                
+                team_list.append(
+                    f"**{team['team_name']}** [`{team['team_tag']}`]\n"
+                    f"└ Members: {member_count} | ID: `{team['id']}`"
+                )
+            
+            embed.add_field(
+                name=f"🌍 {region} ({len(teams)} teams)",
+                value="\n\n".join(team_list) if team_list else "*No teams*",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Requested by {interaction.user.name}")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @app_commands.command(
+        name="admin-team-info",
+        description="[ADMIN] View detailed information about all teams and their members"
+    )
+    async def admin_team_info(self, interaction: discord.Interaction):
+        """Display detailed information about all teams and their members."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "📋 No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Create multiple embeds (Discord has a limit)
+        embeds = []
+        current_embed = discord.Embed(
+            title="📊 Detailed Team Information",
+            description=f"Total Teams: **{len(all_teams)}**",
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow()
+        )
+        field_count = 0
+        
+        for team in all_teams:
+            # Get all members
+            members = await db.get_team_members(team['id'])
+            
+            # Organize members by role
+            captain = None
+            managers = []
+            players = []
+            coach = None
+            
+            for member in members:
+                if member['role'] == 'captain':
+                    captain = member
+                elif member['role'] == 'manager':
+                    managers.append(member)
+                elif member['role'] == 'player':
+                    players.append(member)
+                elif member['role'] == 'coach':
+                    coach = member
+            
+            # Build team info
+            team_info = f"**Tag:** `{team['team_tag']}`\n**Region:** {team['region']}\n**ID:** `{team['id']}`\n\n"
+            
+            # Add captain
+            if captain:
+                player_info = await db.get_player_by_discord_id(captain['discord_id'])
+                ign = player_info['ign'] if player_info and player_info['ign'] else "N/A"
+                team_info += f"👑 **Captain:** {ign} (<@{captain['discord_id']}>)\n"
+            else:
+                team_info += f"👑 **Captain:** *None*\n"
+            
+            # Add managers
+            if managers:
+                manager_list = []
+                for mgr in managers:
+                    manager_list.append(f"<@{mgr['discord_id']}>")
+                team_info += f"👔 **Managers ({len(managers)}):** {', '.join(manager_list)}\n"
+            
+            # Add players
+            if players:
+                player_list = []
+                for p in players:
+                    player_info = await db.get_player_by_discord_id(p['discord_id'])
+                    ign = player_info['ign'] if player_info and player_info['ign'] else "N/A"
+                    player_list.append(f"{ign}")
+                team_info += f"🎮 **Players ({len(players)}):** {', '.join(player_list)}\n"
+            
+            # Add coach
+            if coach:
+                team_info += f"🎯 **Coach:** <@{coach['discord_id']}>\n"
+            
+            # Check if we need a new embed (max 25 fields)
+            if field_count >= 25:
+                embeds.append(current_embed)
+                current_embed = discord.Embed(
+                    title="📊 Detailed Team Information (continued)",
+                    color=discord.Color.gold(),
+                    timestamp=datetime.utcnow()
+                )
+                field_count = 0
+            
+            current_embed.add_field(
+                name=f"🏆 {team['team_name']}",
+                value=team_info,
+                inline=False
+            )
+            field_count += 1
+        
+        # Add the last embed
+        if field_count > 0:
+            current_embed.set_footer(text=f"Requested by {interaction.user.name}")
+            embeds.append(current_embed)
+        
+        # Send all embeds
+        for i, embed in enumerate(embeds):
+            if i == 0:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+
 async def setup(bot: commands.Bot):
     """Load the Admin cog."""
     await bot.add_cog(Admin(bot))
