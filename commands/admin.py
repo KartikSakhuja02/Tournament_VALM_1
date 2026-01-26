@@ -2356,13 +2356,6 @@ class DeleteTeamConfirmView(discord.ui.View):
             timestamp=datetime.utcnow()
         )
         await interaction.response.edit_message(embed=embed, view=None)
-
-
-class Admin(commands.Cog):
-    """Admin commands for managing the tournament."""
-    
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
     
     @app_commands.command(
         name="admin-all-teams",
