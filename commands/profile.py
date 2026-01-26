@@ -15,26 +15,30 @@ class Profile(commands.Cog):
         self.bot = bot
     
     @app_commands.command(name="profile", description="View your player profile")
-    async def profile(self, interaction: discord.Interaction):
+    @app_commands.describe(user="The user whose profile to view (optional)")
+    async def profile(self, interaction: discord.Interaction, user: discord.Member = None):
         """View player profile with stats"""
         await interaction.response.defer(ephemeral=True)
         
+        # Use provided user or default to the command user
+        target_user = user if user else interaction.user
+        
         try:
             # Get player profile
-            profile = await db.get_player_profile(interaction.user.id)
+            profile = await db.get_player_profile(target_user.id)
             
             if not profile:
                 # Check if user is a manager of any team
-                manager_teams = await db.get_user_teams_by_role(interaction.user.id, 'manager')
+                manager_teams = await db.get_user_teams_by_role(target_user.id, 'manager')
                 
                 if manager_teams:
                     # Show manager profile instead
-                    await self.show_manager_profile(interaction, manager_teams)
+                    await self.show_manager_profile(interaction, manager_teams, target_user)
                     return
                 
                 embed = discord.Embed(
                     title="❌ Profile Not Found",
-                    description="You are not registered as a player. Use `/register` to register.",
+                    description=f"{'You are' if target_user == interaction.user else f'{target_user.mention} is'} not registered as a player.",
                     color=discord.Color.red()
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
@@ -62,8 +66,8 @@ class Profile(commands.Cog):
             # Player Info Section
             embed.add_field(
                 name="👤 Player Info",
-                value=f"**Discord:** {interaction.user.mention}\n"
-                      f"**Discord ID:** `{interaction.user.id}`",
+                value=f"**Discord:** {target_user.mention}\n"
+                      f"**Discord ID:** `{target_user.id}`",
                 inline=False
             )
             
@@ -90,7 +94,7 @@ class Profile(commands.Cog):
             )
             
             # Set thumbnail to user avatar
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            embed.set_thumbnail(url=target_user.display_avatar.url)
             
             # Footer
             embed.set_footer(text=f"Registered on {profile['registered_at'].strftime('%b %d, %Y')}")
@@ -106,7 +110,7 @@ class Profile(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
     
-    async def show_manager_profile(self, interaction: discord.Interaction, manager_teams: list):
+    async def show_manager_profile(self, interaction: discord.Interaction, manager_teams: list, target_user: discord.Member):
         """Show manager profile with team information"""
         # For now, show info for the first team (we can expand to multiple teams later)
         team = manager_teams[0]
@@ -131,8 +135,8 @@ class Profile(commands.Cog):
         # Manager Info Section
         embed.add_field(
             name="👤 Manager Info",
-            value=f"**Discord:** {interaction.user.mention}\n"
-                  f"**Discord ID:** `{interaction.user.id}`\n"
+            value=f"**Discord:** {target_user.mention}\n"
+                  f"**Discord ID:** `{target_user.id}`\n"
                   f"**Role:** Team Manager",
             inline=False
         )
@@ -154,7 +158,7 @@ class Profile(commands.Cog):
         if team.get('logo_url'):
             embed.set_thumbnail(url=team['logo_url'])
         else:
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            embed.set_thumbnail(url=target_user.display_avatar.url)
         
         # Footer with info note
         if not captain:
