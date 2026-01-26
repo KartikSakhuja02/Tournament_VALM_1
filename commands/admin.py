@@ -3178,6 +3178,189 @@ class DeleteTeamConfirmView(discord.ui.View):
         )
     
     @app_commands.command(
+        name="admin-registration-info",
+        description="[ADMIN] View all team registrations with detailed player information"
+    )
+    async def admin_registration_info(self, interaction: discord.Interaction):
+        """Display all registered teams with complete player information."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Create embeds for each team (Discord has a limit of 10 embeds per message)
+        embeds = []
+        
+        for team in all_teams:
+            # Get team members
+            team_members = await db.get_team_members(team['id'])
+            
+            # Create embed for this team
+            embed = discord.Embed(
+                title=f"📋 {team['team_name']} [{team['team_tag']}]",
+                color=discord.Color.blue(),
+                timestamp=datetime.utcnow()
+            )
+            
+            # Team Info
+            embed.add_field(
+                name="🏷️ Team Details",
+                value=(
+                    f"**Region:** {team['region']}\n"
+                    f"**Team ID:** `{team['id']}`\n"
+                    f"**Created:** {team['created_at'].strftime('%Y-%m-%d %H:%M UTC')}\n"
+                    f"**Members:** {len(team_members)}/5"
+                ),
+                inline=False
+            )
+            
+            # Captain
+            captain = next((m for m in team_members if m['role'] == 'captain'), None)
+            if captain:
+                captain_user = await interaction.client.fetch_user(captain['discord_id'])
+                embed.add_field(
+                    name="👑 Captain",
+                    value=f"{captain_user.mention}\n**IGN:** `{captain['ign']}`\n**Discord ID:** `{captain['discord_id']}`",
+                    inline=False
+                )
+            
+            # Players
+            players = [m for m in team_members if m['role'] == 'player']
+            if players:
+                player_list = []
+                for idx, player in enumerate(players, 1):
+                    try:
+                        player_user = await interaction.client.fetch_user(player['discord_id'])
+                        player_list.append(
+                            f"{idx}. {player_user.mention}\n"
+                            f"   **IGN:** `{player['ign']}`\n"
+                            f"   **Discord ID:** `{player['discord_id']}`"
+                        )
+                    except:
+                        player_list.append(
+                            f"{idx}. <@{player['discord_id']}>\n"
+                            f"   **IGN:** `{player['ign']}`\n"
+                            f"   **Discord ID:** `{player['discord_id']}`"
+                        )
+                
+                embed.add_field(
+                    name=f"👥 Players ({len(players)})",
+                    value="\n".join(player_list) if player_list else "*No players*",
+                    inline=False
+                )
+            
+            # Managers
+            managers = [m for m in team_members if m['role'] == 'manager']
+            if managers:
+                manager_list = []
+                for manager in managers:
+                    try:
+                        manager_user = await interaction.client.fetch_user(manager['discord_id'])
+                        manager_list.append(f"• {manager_user.mention} (`{manager['discord_id']}`)")
+                    except:
+                        manager_list.append(f"• <@{manager['discord_id']}> (`{manager['discord_id']}`)")
+                
+                embed.add_field(
+                    name="👔 Managers",
+                    value="\n".join(manager_list),
+                    inline=True
+                )
+            
+            # Coaches
+            coaches = [m for m in team_members if m['role'] == 'coach']
+            if coaches:
+                coach_list = []
+                for coach in coaches:
+                    try:
+                        coach_user = await interaction.client.fetch_user(coach['discord_id'])
+                        coach_list.append(f"• {coach_user.mention} (`{coach['discord_id']}`)")
+                    except:
+                        coach_list.append(f"• <@{coach['discord_id']}> (`{coach['discord_id']}`)")
+                
+                embed.add_field(
+                    name="🎓 Coaches",
+                    value="\n".join(coach_list),
+                    inline=True
+                )
+            
+            # Logo
+            if team.get('logo_url') and (team['logo_url'].startswith('http://') or team['logo_url'].startswith('https://')):
+                embed.set_thumbnail(url=team['logo_url'])
+            
+            embed.set_footer(text=f"Team {all_teams.index(team) + 1} of {len(all_teams)}")
+            
+            embeds.append(embed)
+            
+            # Discord limits to 10 embeds per message, send in batches
+            if len(embeds) == 10:
+                await interaction.followup.send(embeds=embeds, ephemeral=True)
+                embeds = []
+        
+        # Send remaining embeds
+        if embeds:
+            await interaction.followup.send(embeds=embeds, ephemeral=True)
+        
+        # Summary embed at the end
+        summary_embed = discord.Embed(
+            title="📊 Registration Summary",
+            color=discord.Color.green(),
+            timestamp=datetime.utcnow()
+        )
+        summary_embed.add_field(
+            name="Total Teams",
+            value=f"**{len(all_teams)}** registered",
+            inline=True
+        )
+        
+        # Count by region
+        regions = {}
+        for team in all_teams:
+            region = team['region']
+            regions[region] = regions.get(region, 0) + 1
+        
+        region_breakdown = "\n".join([f"**{region}:** {count}" for region, count in sorted(regions.items())])
+        summary_embed.add_field(
+            name="By Region",
+            value=region_breakdown,
+            inline=True
+        )
+        
+        summary_embed.set_footer(text=f"Requested by {interaction.user.name}")
+        
+        await interaction.followup.send(embed=summary_embed, ephemeral=True)
+    
+    @app_commands.command(
         name="sync",
         description="[ADMIN] Sync slash commands with Discord"
     )
