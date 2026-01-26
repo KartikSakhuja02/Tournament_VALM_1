@@ -9,9 +9,11 @@ import discord
 import asyncio
 import os
 from dotenv import load_dotenv
-from database.db import db
 
+# Load environment variables FIRST before importing db
 load_dotenv()
+
+from database.db import db
 
 async def migrate_logos():
     """Upload all existing logos from team_logos/ folder to Discord storage"""
