@@ -419,6 +419,242 @@ class TeamSelectDropdown(discord.ui.Select):
             print(f"Error in team selection callback: {e}")
 
 
+# Team editing UI classes - must be defined before Admin class
+class EditTeamSelectView(discord.ui.View):
+    """View with team selection dropdown for editing."""
+    
+    def __init__(self, teams: list):
+        super().__init__(timeout=300)
+        self.teams = teams
+        self.add_item(EditTeamSelect(teams))
+
+
+class EditTeamSelect(discord.ui.Select):
+    """Dropdown for selecting team to edit."""
+    
+    def __init__(self, teams: list):
+        self.teams = teams
+        
+        # Create options from teams
+        options = []
+        for team in teams[:25]:  # Discord limit of 25 options
+            options.append(
+                discord.SelectOption(
+                    label=team['team_name'],
+                    value=str(team['id']),
+                    description=f"Tag: {team['team_tag']} | Region: {team['region']}",
+                    emoji="👥"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select a team to edit...",
+            options=options,
+            custom_id="edit_team_select"
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        team_id = int(self.values[0])
+        
+        # Find the selected team
+        selected_team = next((t for t in self.teams if t['id'] == team_id), None)
+        
+        if not selected_team:
+            await interaction.response.send_message(
+                "❌ Team not found.",
+                ephemeral=True
+            )
+            return
+        
+        # Convert to dict
+        team_dict = dict(selected_team)
+        
+        # Show current team info and field selection
+        info_embed = discord.Embed(
+            title="📋 Current Team Details",
+            description=f"Editing team: **{team_dict['team_name']}**",
+            color=discord.Color.blue(),
+            timestamp=datetime.utcnow()
+        )
+        info_embed.add_field(
+            name="👥 Team Name",
+            value=team_dict['team_name'],
+            inline=True
+        )
+        info_embed.add_field(
+            name="🏷️ Team Tag",
+            value=team_dict['team_tag'],
+            inline=True
+        )
+        info_embed.add_field(
+            name="🌍 Region",
+            value=team_dict['region'],
+            inline=True
+        )
+        info_embed.add_field(
+            name="👑 Captain",
+            value=f"<@{team_dict['captain_discord_id']}>",
+            inline=True
+        )
+        info_embed.add_field(
+            name="🎨 Logo URL",
+            value=team_dict['logo_url'] or 'Not set',
+            inline=False
+        )
+        info_embed.add_field(
+            name="📅 Created At",
+            value=team_dict['created_at'].strftime("%Y-%m-%d %H:%M UTC"),
+            inline=True
+        )
+        info_embed.add_field(
+            name="Team ID",
+            value=str(team_dict['id']),
+            inline=True
+        )
+        info_embed.set_footer(text="Select a field below to edit")
+        
+        # If logo_url exists, set as thumbnail
+        if team_dict['logo_url']:
+            info_embed.set_thumbnail(url=team_dict['logo_url'])
+        
+        # Create view with field selection dropdown
+        view = EditTeamFieldView(team_dict)
+        
+        await interaction.response.edit_message(embed=info_embed, view=view)
+
+
+class EditTeamFieldView(discord.ui.View):
+    """View containing the team field selection dropdown."""
+    
+    def __init__(self, team_data: dict):
+        super().__init__(timeout=300)
+        self.add_item(EditTeamFieldSelect(team_data))
+    
+    async def on_timeout(self):
+        # Disable all items when view times out
+        for item in self.children:
+            item.disabled = True
+
+
+class EditTeamFieldSelect(discord.ui.Select):
+    """Dropdown for selecting which team field to edit."""
+    
+    def __init__(self, team_data: dict):
+        self.team_data = team_data
+        
+        # Create options for each editable field
+        options = [
+            discord.SelectOption(
+                label="Team Name",
+                value="team_name",
+                description=f"Current: {team_data['team_name']}",
+                emoji="👥"
+            ),
+            discord.SelectOption(
+                label="Team Tag",
+                value="team_tag",
+                description=f"Current: {team_data['team_tag']}",
+                emoji="🏷️"
+            ),
+            discord.SelectOption(
+                label="Region",
+                value="region",
+                description=f"Current: {team_data['region']}",
+                emoji="🌍"
+            ),
+            discord.SelectOption(
+                label="Logo URL",
+                value="logo_url",
+                description=f"Current: {team_data['logo_url'][:30] if team_data['logo_url'] else 'Not set'}...",
+                emoji="🎨"
+            )
+        ]
+        
+        super().__init__(
+            placeholder="Select a field to edit...",
+            options=options,
+            custom_id="edit_team_field_select"
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        field = self.values[0]
+        
+        # For now, just show a modal for text input
+        modal = EditTeamValueModal(
+            field=field,
+            current_value=self.team_data[field] or "",
+            team_data=self.team_data
+        )
+        await interaction.response.send_modal(modal)
+
+
+class EditTeamValueModal(discord.ui.Modal):
+    """Modal for entering the new value for a team field."""
+    
+    def __init__(self, field: str, current_value: str, team_data: dict):
+        self.field = field
+        self.team_data = team_data
+        
+        # Map field names to user-friendly labels
+        field_labels = {
+            "team_name": "Team Name",
+            "team_tag": "Team Tag",
+            "region": "Region",
+            "logo_url": "Logo URL"
+        }
+        
+        super().__init__(title=f"Edit {field_labels[field]}")
+        
+        # Add text input with current value as placeholder
+        self.new_value_input = discord.ui.TextInput(
+            label=f"New {field_labels[field]}",
+            placeholder=current_value or "Enter new value",
+            default=current_value,
+            required=True if field != "logo_url" else False,
+            max_length=500 if field == "logo_url" else 50,
+            style=discord.TextStyle.short if field != "logo_url" else discord.TextStyle.paragraph
+        )
+        self.add_item(self.new_value_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        new_value = self.new_value_input.value.strip()
+        
+        # Defer the response since database operation might take time
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Whitelist valid field names to prevent SQL injection
+            valid_fields = ["team_name", "team_tag", "region", "logo_url"]
+            if self.field not in valid_fields:
+                raise ValueError(f"Invalid field: {self.field}")
+            
+            # Update the team's field in database
+            query = f"UPDATE teams SET {self.field} = $1, updated_at = NOW() WHERE id = $2"
+            await db.pool.execute(query, new_value if new_value else None, self.team_data['id'])
+            
+            # Send confirmation to admin
+            embed = discord.Embed(
+                title="✅ Team Updated Successfully",
+                description=f"Updated **{self.team_data['team_name']}**",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name="Field", value=self.field.replace('_', ' ').title(), inline=True)
+            embed.add_field(name="Old Value", value=self.team_data[self.field] or 'Not set', inline=True)
+            embed.add_field(name="New Value", value=new_value or 'Not set', inline=True)
+            embed.set_footer(text=f"Edited by {interaction.user.display_name}")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Error Updating Team",
+                description=f"Failed to update team: {str(e)}",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+
+
 class Admin(commands.Cog):
     """Admin commands for managing the tournament."""
     
@@ -1128,20 +1364,22 @@ class Admin(commands.Cog):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
-class EditTeamSelectView(discord.ui.View):
-    """View with team selection dropdown for editing."""
+class AdminTransferCaptainTeamView(discord.ui.View):
+    """View with team selection dropdown for captain transfer."""
     
-    def __init__(self, teams: list):
+    def __init__(self, teams: list, admin_user: discord.User):
         super().__init__(timeout=300)
         self.teams = teams
-        self.add_item(EditTeamSelect(teams))
+        self.admin_user = admin_user
+        self.add_item(AdminTransferCaptainTeamSelect(teams, admin_user))
 
 
-class EditTeamSelect(discord.ui.Select):
-    """Dropdown for selecting team to edit."""
+class AdminTransferCaptainTeamSelect(discord.ui.Select):
+    """Dropdown for selecting team for captain transfer."""
     
-    def __init__(self, teams: list):
+    def __init__(self, teams: list, admin_user: discord.User):
         self.teams = teams
+        self.admin_user = admin_user
         
         # Create options from teams
         options = []
@@ -1156,9 +1394,9 @@ class EditTeamSelect(discord.ui.Select):
             )
         
         super().__init__(
-            placeholder="Select a team to edit...",
+            placeholder="Select a team...",
             options=options,
-            custom_id="edit_team_select"
+            custom_id="transfer_captain_team_select"
         )
     
     async def callback(self, interaction: discord.Interaction):
@@ -1174,77 +1412,117 @@ class EditTeamSelect(discord.ui.Select):
             )
             return
         
-        # Convert to dict
-        team_dict = dict(selected_team)
+        # Get team members
+        team_members = await db.get_team_members(team_id)
         
-        # Show current team info and field selection
-        info_embed = discord.Embed(
-            title="📋 Current Team Details",
-            description=f"Editing team: **{team_dict['team_name']}**",
-            color=discord.Color.blue(),
+        if not team_members or len(team_members) == 0:
+            await interaction.response.send_message(
+                "❌ This team has no members.",
+                ephemeral=True
+            )
+            return
+        
+        # Show member selection
+        embed = discord.Embed(
+            title="👑 Select New Captain",
+            description=f"Select a member from **{selected_team['team_name']}** to become the new captain.",
+            color=discord.Color.gold(),
             timestamp=datetime.utcnow()
         )
-        info_embed.add_field(
-            name="👥 Team Name",
-            value=team_dict['team_name'],
-            inline=True
-        )
-        info_embed.add_field(
-            name="🏷️ Team Tag",
-            value=team_dict['team_tag'],
-            inline=True
-        )
-        info_embed.add_field(
-            name="🌍 Region",
-            value=team_dict['region'],
-            inline=True
-        )
-        info_embed.add_field(
-            name="👑 Captain",
-            value=f"<@{team_dict['captain_discord_id']}>",
-            inline=True
-        )
-        info_embed.add_field(
-            name="🎨 Logo URL",
-            value=team_dict['logo_url'] or 'Not set',
-            inline=False
-        )
-        info_embed.add_field(
-            name="📅 Created At",
-            value=team_dict['created_at'].strftime("%Y-%m-%d %H:%M UTC"),
-            inline=True
-        )
-        info_embed.add_field(
-            name="Team ID",
-            value=str(team_dict['id']),
-            inline=True
-        )
-        info_embed.set_footer(text="Select a field below to edit")
         
-        # If logo_url exists, set as thumbnail
-        if team_dict['logo_url']:
-            info_embed.set_thumbnail(url=team_dict['logo_url'])
+        view = AdminTransferCaptainMemberView(team_members, team_id, selected_team['team_name'], selected_team['captain_discord_id'])
         
-        # Create view with field selection dropdown
-        view = EditTeamFieldView(team_dict)
-        
-        await interaction.response.edit_message(embed=info_embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
-class EditTeamFieldView(discord.ui.View):
-    """View containing the team field selection dropdown."""
+class AdminTransferCaptainMemberView(discord.ui.View):
+    """View with member selection dropdown for captain transfer."""
     
-    def __init__(self, team_data: dict):
+    def __init__(self, team_members: list, team_id: int, team_name: str, current_captain_id: int):
         super().__init__(timeout=300)
-        self.add_item(EditTeamFieldSelect(team_data))
+        self.add_item(AdminTransferCaptainMemberSelect(team_members, team_id, team_name, current_captain_id))
+
+
+class AdminTransferCaptainMemberSelect(discord.ui.Select):
+    """Dropdown for selecting new captain from team members."""
     
-    async def on_timeout(self):
-        # Disable all items when view times out
-        for item in self.children:
-            item.disabled = True
+    def __init__(self, team_members: list, team_id: int, team_name: str, current_captain_id: int):
+        self.team_members = team_members
+        self.team_id = team_id
+        self.team_name = team_name
+        self.current_captain_id = current_captain_id
+        
+        # Create options from team members
+        options = []
+        for member in team_members[:25]:  # Discord limit
+            is_current = member['discord_id'] == current_captain_id
+            options.append(
+                discord.SelectOption(
+                    label=member['ign'],
+                    value=str(member['discord_id']),
+                    description=f"Role: {member['role']}" + (" (Current Captain)" if is_current else ""),
+                    emoji="👑" if is_current else "👤"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select new captain...",
+            options=options,
+            custom_id="transfer_captain_member_select"
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        new_captain_id = int(self.values[0])
+        
+        if new_captain_id == self.current_captain_id:
+            await interaction.response.send_message(
+                "❌ This user is already the captain.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Update captain in database
+            await db.pool.execute(
+                "UPDATE teams SET captain_discord_id = $1, updated_at = NOW() WHERE id = $2",
+                new_captain_id, self.team_id
+            )
+            
+            # Update roles in team_members table
+            await db.pool.execute(
+                "UPDATE team_members SET role = 'player' WHERE team_id = $1 AND discord_id = $2",
+                self.team_id, self.current_captain_id
+            )
+            await db.pool.execute(
+                "UPDATE team_members SET role = 'captain' WHERE team_id = $1 AND discord_id = $2",
+                self.team_id, new_captain_id
+            )
+            
+            # Send confirmation
+            embed = discord.Embed(
+                title="✅ Captain Transferred",
+                description=f"Successfully transferred captainship for **{self.team_name}**",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name="New Captain", value=f"<@{new_captain_id}>", inline=True)
+            embed.add_field(name="Previous Captain", value=f"<@{self.current_captain_id}>", inline=True)
+            embed.set_footer(text=f"Transferred by {interaction.user.display_name}")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description=f"Failed to transfer captainship: {str(e)}",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
-class EditTeamFieldSelect(discord.ui.Select):
+class DeleteTeamView(discord.ui.View):
     """Dropdown for selecting which team field to edit."""
     
     def __init__(self, team_data: dict):
