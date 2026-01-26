@@ -2780,6 +2780,111 @@ class Admin(commands.Cog):
             view=view,
             ephemeral=True
         )
+    
+    @app_commands.command(
+        name="sync",
+        description="[ADMIN] Sync slash commands with Discord"
+    )
+    async def sync_commands(self, interaction: discord.Interaction):
+        """Sync all slash commands to Discord."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Sync commands to the current guild (faster)
+            synced_guild = await self.bot.tree.sync(guild=interaction.guild)
+            
+            # Sync commands globally (takes up to 1 hour to propagate)
+            synced_global = await self.bot.tree.sync()
+            
+            # Get all registered commands
+            all_commands = self.bot.tree.get_commands()
+            
+            embed = discord.Embed(
+                title="✅ Commands Synced Successfully",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            
+            embed.add_field(
+                name="📍 Guild Sync (Instant)",
+                value=f"Synced **{len(synced_guild)}** commands to this server.\nThey are available immediately!",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🌍 Global Sync",
+                value=f"Synced **{len(synced_global)}** commands globally.\nMay take up to 1 hour to appear everywhere.",
+                inline=False
+            )
+            
+            # List all commands
+            if all_commands:
+                command_list = "\n".join([f"• `/{cmd.name}`" for cmd in all_commands[:25]])  # Limit to 25 to avoid embed limits
+                if len(all_commands) > 25:
+                    command_list += f"\n• ... and {len(all_commands) - 25} more"
+                
+                embed.add_field(
+                    name=f"📋 Registered Commands ({len(all_commands)} total)",
+                    value=command_list,
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Synced by {interaction.user.name}")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Commands synced: {len(synced_guild)} guild, {len(synced_global)} global")
+            
+        except discord.HTTPException as e:
+            error_embed = discord.Embed(
+                title="❌ Sync Failed",
+                description=f"Failed to sync commands with Discord.\n\n**Error:** {str(e)}",
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            
+            if hasattr(e, 'code'):
+                error_embed.add_field(name="Error Code", value=f"`{e.code}`", inline=True)
+            if hasattr(e, 'status'):
+                error_embed.add_field(name="HTTP Status", value=f"`{e.status}`", inline=True)
+            
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"✗ Command sync failed: {e}")
+        
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Unexpected Error",
+                description=f"An unexpected error occurred during sync.\n\n**Error:** {str(e)}",
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            print(f"✗ Unexpected sync error: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 async def setup(bot: commands.Bot):
