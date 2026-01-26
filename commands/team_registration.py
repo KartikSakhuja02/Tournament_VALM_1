@@ -419,13 +419,37 @@ class LogoConfirmationView(discord.ui.View):
                     if resp.status == 200:
                         logo_data = await resp.read()
                         
-                        # Save to file
+                        # Save to file (local backup)
                         os.makedirs('team_logos', exist_ok=True)
                         filename = f"team_logos/{self.team_name.replace(' ', '_')}.png"
                         with open(filename, 'wb') as f:
                             f.write(logo_data)
                         
-                        logo_url = self.attachment.url
+                        # Upload to permanent Discord storage channel
+                        logo_storage_channel_id = os.getenv('LOGO_STORAGE_CHANNEL_ID')
+                        if not logo_storage_channel_id:
+                            logo_storage_channel_id = os.getenv('BOT_LOGS_CHANNEL_ID')
+                        
+                        if logo_storage_channel_id:
+                            storage_channel = interaction.guild.get_channel(int(logo_storage_channel_id))
+                            if storage_channel:
+                                # Upload the saved file to get a permanent URL
+                                logo_file = discord.File(filename, filename=f"{self.team_name.replace(' ', '_')}.png")
+                                storage_message = await storage_channel.send(
+                                    f"Logo for team: **{self.team_name}**",
+                                    file=logo_file
+                                )
+                                # Get the permanent URL from the uploaded attachment
+                                if storage_message.attachments:
+                                    logo_url = storage_message.attachments[0].url
+                                else:
+                                    logo_url = None
+                            else:
+                                await interaction.channel.send("⚠️ Logo storage channel not found. Continuing without logo.")
+                                logo_url = None
+                        else:
+                            await interaction.channel.send("⚠️ Logo storage channel not configured. Continuing without logo.")
+                            logo_url = None
                     else:
                         await interaction.channel.send("❌ Failed to download the logo. Continuing without logo.")
                         logo_url = None
