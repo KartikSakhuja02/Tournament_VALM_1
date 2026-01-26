@@ -385,6 +385,22 @@ class TeamSelectDropdown(discord.ui.Select):
                     ephemeral=True
                 )
             
+            elif self.action_type == 'player':
+                if is_member:
+                    # Update existing member to player role
+                    await db.pool.execute(
+                        "UPDATE team_members SET role = 'player' WHERE team_id = $1 AND discord_id = $2",
+                        team_id, self.user_to_add.id
+                    )
+                else:
+                    # Add as new player
+                    await db.add_team_member(team_id, self.user_to_add.id, 'player')
+                
+                await interaction.followup.send(
+                    f"✅ {self.user_to_add.mention} has been added as player to **{selected_team['team_name']}**!",
+                    ephemeral=True
+                )
+            
             # Assign team role
             try:
                 team_info = await db.get_team_by_id(team_id)
@@ -2710,6 +2726,57 @@ class Admin(commands.Cog):
         view = TeamSelectView(all_teams, 'coach', user)
         await interaction.followup.send(
             f"Select which team to add {user.mention} as coach:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @app_commands.command(
+        name="admin-add-player",
+        description="[ADMIN] Add a player to a team"
+    )
+    @app_commands.describe(user="The user to add as player")
+    async def admin_add_player(self, interaction: discord.Interaction, user: discord.Member):
+        """Add a player to a team."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Show team selection dropdown
+        view = TeamSelectView(all_teams, 'player', user)
+        await interaction.followup.send(
+            f"Select which team to add {user.mention} as player:",
             view=view,
             ephemeral=True
         )
