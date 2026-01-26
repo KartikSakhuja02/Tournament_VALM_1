@@ -241,6 +241,168 @@ class EditValueModal(discord.ui.Modal):
             print(traceback.format_exc())
 
 
+class TeamSelectView(discord.ui.View):
+    """View with dropdown to select a team"""
+    
+    def __init__(self, teams: list, action_type: str, user_to_add: discord.Member = None):
+        super().__init__(timeout=300)
+        self.teams = teams
+        self.action_type = action_type  # 'captain', 'manager', or 'coach'
+        self.user_to_add = user_to_add
+        self.add_item(TeamSelectDropdown(teams, action_type, user_to_add))
+
+
+class TeamSelectDropdown(discord.ui.Select):
+    """Dropdown for selecting a team"""
+    
+    def __init__(self, teams: list, action_type: str, user_to_add: discord.Member = None):
+        self.teams = teams
+        self.action_type = action_type
+        self.user_to_add = user_to_add
+        
+        options = []
+        for team in teams[:25]:  # Discord limit
+            options.append(
+                discord.SelectOption(
+                    label=f"{team['team_name']}",
+                    value=str(team['id']),
+                    description=f"[{team['team_tag']}] - {team['region']}"
+                )
+            )
+        
+        super().__init__(
+            placeholder=f"Select a team to add {action_type}...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle team selection"""
+        await interaction.response.defer(ephemeral=True)
+        
+        team_id = int(self.values[0])
+        selected_team = None
+        for team in self.teams:
+            if team['id'] == team_id:
+                selected_team = team
+                break
+        
+        if not selected_team:
+            await interaction.followup.send("❌ Team not found.", ephemeral=True)
+            return
+        
+        try:
+            # Check if user is already a member
+            team_members = await db.get_team_members(team_id)
+            is_member = any(m['discord_id'] == self.user_to_add.id for m in team_members)
+            
+            if self.action_type == 'captain':
+                # Check if team already has a captain
+                team_info = await db.get_team_by_id(team_id)
+                current_captain_id = team_info.get('captain_discord_id')
+                
+                if is_member:
+                    # Update existing member to captain role
+                    await db.pool.execute(
+                        "UPDATE team_members SET role = 'captain' WHERE team_id = $1 AND discord_id = $2",
+                        team_id, self.user_to_add.id
+                    )
+                else:
+                    # Add as new captain
+                    await db.add_team_member(team_id, self.user_to_add.id, 'captain')
+                
+                # Update teams table
+                await db.update_team(team_id, captain_discord_id=self.user_to_add.id)
+                
+                # If there was a previous captain, demote them to player
+                if current_captain_id and current_captain_id != self.user_to_add.id:
+                    await db.pool.execute(
+                        "UPDATE team_members SET role = 'player' WHERE team_id = $1 AND discord_id = $2",
+                        team_id, current_captain_id
+                    )
+                
+                # Assign captain role
+                try:
+                    captain_role_id = os.getenv('CAPTAIN_ROLE_ID')
+                    if captain_role_id:
+                        captain_role = interaction.guild.get_role(int(captain_role_id))
+                        if captain_role:
+                            await self.user_to_add.add_roles(captain_role)
+                    
+                    # Remove captain role from old captain
+                    if current_captain_id and current_captain_id != self.user_to_add.id:
+                        old_captain = interaction.guild.get_member(current_captain_id)
+                        if old_captain and captain_role:
+                            await old_captain.remove_roles(captain_role)
+                except Exception as e:
+                    print(f"Error assigning captain role: {e}")
+                
+                await interaction.followup.send(
+                    f"✅ {self.user_to_add.mention} has been assigned as captain of **{selected_team['team_name']}**!",
+                    ephemeral=True
+                )
+            
+            elif self.action_type == 'manager':
+                if is_member:
+                    # Update existing member to manager role
+                    await db.pool.execute(
+                        "UPDATE team_members SET role = 'manager' WHERE team_id = $1 AND discord_id = $2",
+                        team_id, self.user_to_add.id
+                    )
+                else:
+                    # Add as new manager
+                    await db.add_team_member(team_id, self.user_to_add.id, 'manager')
+                
+                # Assign manager role
+                try:
+                    manager_role_id = os.getenv('MANAGER_ROLE_ID')
+                    if manager_role_id:
+                        manager_role = interaction.guild.get_role(int(manager_role_id))
+                        if manager_role:
+                            await self.user_to_add.add_roles(manager_role)
+                except Exception as e:
+                    print(f"Error assigning manager role: {e}")
+                
+                await interaction.followup.send(
+                    f"✅ {self.user_to_add.mention} has been added as manager of **{selected_team['team_name']}**!",
+                    ephemeral=True
+                )
+            
+            elif self.action_type == 'coach':
+                if is_member:
+                    # Update existing member to coach role
+                    await db.pool.execute(
+                        "UPDATE team_members SET role = 'coach' WHERE team_id = $1 AND discord_id = $2",
+                        team_id, self.user_to_add.id
+                    )
+                else:
+                    # Add as new coach
+                    await db.add_team_member(team_id, self.user_to_add.id, 'coach')
+                
+                await interaction.followup.send(
+                    f"✅ {self.user_to_add.mention} has been added as coach of **{selected_team['team_name']}**!",
+                    ephemeral=True
+                )
+            
+            # Assign team role
+            try:
+                team_info = await db.get_team_by_id(team_id)
+                if team_info and team_info.get('role_id'):
+                    team_role = interaction.guild.get_role(team_info['role_id'])
+                    if team_role:
+                        await self.user_to_add.add_roles(team_role)
+            except Exception as e:
+                print(f"Error assigning team role: {e}")
+        
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error in team selection callback: {e}")
+
+
 class Admin(commands.Cog):
     """Admin commands for managing the tournament."""
     
@@ -2398,6 +2560,159 @@ class Admin(commands.Cog):
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    @app_commands.command(
+        name="admin-assign-captain",
+        description="[ADMIN] Assign a captain to a team"
+    )
+    @app_commands.describe(user="The user to assign as captain")
+    async def admin_assign_captain(self, interaction: discord.Interaction, user: discord.Member):
+        """Assign a captain to a team."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Show team selection dropdown
+        view = TeamSelectView(all_teams, 'captain', user)
+        await interaction.followup.send(
+            f"Select which team to assign {user.mention} as captain:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @app_commands.command(
+        name="admin-add-manager",
+        description="[ADMIN] Add a manager to a team"
+    )
+    @app_commands.describe(user="The user to add as manager")
+    async def admin_add_manager(self, interaction: discord.Interaction, user: discord.Member):
+        """Add a manager to a team."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Show team selection dropdown
+        view = TeamSelectView(all_teams, 'manager', user)
+        await interaction.followup.send(
+            f"Select which team to add {user.mention} as manager:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @app_commands.command(
+        name="admin-add-coach",
+        description="[ADMIN] Add a coach to a team"
+    )
+    @app_commands.describe(user="The user to add as coach")
+    async def admin_add_coach(self, interaction: discord.Interaction, user: discord.Member):
+        """Add a coach to a team."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Show team selection dropdown
+        view = TeamSelectView(all_teams, 'coach', user)
+        await interaction.followup.send(
+            f"Select which team to add {user.mention} as coach:",
+            view=view,
+            ephemeral=True
+        )
 
 
 async def setup(bot: commands.Bot):
