@@ -57,18 +57,16 @@ async def setup_hook():
     # Load command extensions
     await load_commands()
     
-    # Sync slash commands to guild (faster updates, no 100 command limit)
+    # Sync slash commands to guild ONLY (faster updates, no command limit)
     try:
         guild_id = os.getenv("GUILD_ID")
         if guild_id:
             guild = discord.Object(id=int(guild_id))
-            bot.tree.copy_global_to(guild=guild)
             synced = await bot.tree.sync(guild=guild)
             print(f"✓ Synced {len(synced)} command(s) to guild {guild_id}")
         else:
-            # Fallback to global sync if no guild ID
-            synced = await bot.tree.sync()
-            print(f"✓ Synced {len(synced)} command(s) globally")
+            print("⚠️  GUILD_ID not set - commands will not sync automatically")
+            print("   Add GUILD_ID to .env and restart, or use /sync command")
     except Exception as e:
         print(f"✗ Failed to sync commands: {e}")
     
