@@ -2033,8 +2033,8 @@ class Admin(commands.Cog):
             
             embeds.append(embed)
             
-            # Discord limits to 10 embeds per message, send in batches
-            if len(embeds) == 10:
+            # Send in small batches to avoid 6000 character limit
+            if len(embeds) == 3:
                 await interaction.followup.send(embeds=embeds, ephemeral=True)
                 embeds = []
         
