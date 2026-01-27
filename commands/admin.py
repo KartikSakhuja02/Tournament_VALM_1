@@ -1976,10 +1976,9 @@ class Admin(commands.Cog):
             # Captain
             captain = next((m for m in team_members if m['role'] == 'captain'), None)
             if captain:
-                captain_user = await interaction.client.fetch_user(captain['discord_id'])
                 embed.add_field(
                     name="👑 Captain",
-                    value=f"{captain_user.mention}\n**IGN:** `{captain['ign']}`\n**Discord ID:** `{captain['discord_id']}`",
+                    value=f"<@{captain['discord_id']}>\n**IGN:** `{captain['ign']}`\n**Discord ID:** `{captain['discord_id']}`",
                     inline=False
                 )
             
@@ -1988,19 +1987,11 @@ class Admin(commands.Cog):
             if players:
                 player_list = []
                 for idx, player in enumerate(players, 1):
-                    try:
-                        player_user = await interaction.client.fetch_user(player['discord_id'])
-                        player_list.append(
-                            f"{idx}. {player_user.mention}\n"
-                            f"   **IGN:** `{player['ign']}`\n"
-                            f"   **Discord ID:** `{player['discord_id']}`"
-                        )
-                    except:
-                        player_list.append(
-                            f"{idx}. <@{player['discord_id']}>\n"
-                            f"   **IGN:** `{player['ign']}`\n"
-                            f"   **Discord ID:** `{player['discord_id']}`"
-                        )
+                    player_list.append(
+                        f"{idx}. <@{player['discord_id']}>\n"
+                        f"   **IGN:** `{player['ign']}`\n"
+                        f"   **Discord ID:** `{player['discord_id']}`"
+                    )
                 
                 embed.add_field(
                     name=f"👥 Players ({len(players)})",
@@ -2013,11 +2004,7 @@ class Admin(commands.Cog):
             if managers:
                 manager_list = []
                 for manager in managers:
-                    try:
-                        manager_user = await interaction.client.fetch_user(manager['discord_id'])
-                        manager_list.append(f"• {manager_user.mention} (`{manager['discord_id']}`)")
-                    except:
-                        manager_list.append(f"• <@{manager['discord_id']}> (`{manager['discord_id']}`)")
+                    manager_list.append(f"• <@{manager['discord_id']}> (`{manager['discord_id']}`)")
                 
                 embed.add_field(
                     name="👔 Managers",
@@ -2030,11 +2017,7 @@ class Admin(commands.Cog):
             if coaches:
                 coach_list = []
                 for coach in coaches:
-                    try:
-                        coach_user = await interaction.client.fetch_user(coach['discord_id'])
-                        coach_list.append(f"• {coach_user.mention} (`{coach['discord_id']}`)")
-                    except:
-                        coach_list.append(f"• <@{coach['discord_id']}> (`{coach['discord_id']}`)")
+                    coach_list.append(f"• <@{coach['discord_id']}> (`{coach['discord_id']}`)")
                 
                 embed.add_field(
                     name="🎓 Coaches",
