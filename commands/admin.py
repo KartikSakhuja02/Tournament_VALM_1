@@ -585,6 +585,174 @@ class RemoveManagerMemberSelectDropdown(discord.ui.Select):
             print(f"Error removing manager: {e}")
 
 
+class RemovePlayerTeamSelectView(discord.ui.View):
+    """View with team selection dropdown for removing players."""
+    
+    def __init__(self, teams: list, admin_user: discord.User):
+        super().__init__(timeout=300)
+        self.teams = teams
+        self.admin_user = admin_user
+        self.add_item(RemovePlayerTeamSelectDropdown(teams, admin_user))
+
+
+class RemovePlayerTeamSelectDropdown(discord.ui.Select):
+    """Dropdown for selecting a team to remove player from."""
+    
+    def __init__(self, teams: list, admin_user: discord.User):
+        self.teams = teams
+        self.admin_user = admin_user
+        
+        options = []
+        for team in teams[:25]:  # Discord limit
+            options.append(
+                discord.SelectOption(
+                    label=f"{team['team_name']}",
+                    value=str(team['id']),
+                    description=f"[{team['team_tag']}] - {team['region']}"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select a team...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle team selection and show player selection."""
+        await interaction.response.defer(ephemeral=True)
+        
+        team_id = int(self.values[0])
+        selected_team = None
+        for team in self.teams:
+            if team['id'] == team_id:
+                selected_team = team
+                break
+        
+        if not selected_team:
+            await interaction.followup.send("❌ Team not found.", ephemeral=True)
+            return
+        
+        # Get players for this team
+        team_members = await db.get_team_members(team_id)
+        players = [m for m in team_members if m['role'] == 'player']
+        
+        if not players:
+            await interaction.followup.send(
+                f"❌ **{selected_team['team_name']}** has no players to remove.",
+                ephemeral=True
+            )
+            return
+        
+        # Show player selection dropdown
+        view = RemovePlayerMemberSelectView(selected_team, players, self.admin_user)
+        await interaction.followup.send(
+            f"Select a player to remove from **{selected_team['team_name']}**:",
+            view=view,
+            ephemeral=True
+        )
+
+
+class RemovePlayerMemberSelectView(discord.ui.View):
+    """View with player selection dropdown."""
+    
+    def __init__(self, team: dict, players: list, admin_user: discord.User):
+        super().__init__(timeout=300)
+        self.team = team
+        self.players = players
+        self.admin_user = admin_user
+        self.add_item(RemovePlayerMemberSelectDropdown(team, players, admin_user))
+
+
+class RemovePlayerMemberSelectDropdown(discord.ui.Select):
+    """Dropdown for selecting a player to remove."""
+    
+    def __init__(self, team: dict, players: list, admin_user: discord.User):
+        self.team = team
+        self.players = players
+        self.admin_user = admin_user
+        
+        options = []
+        for player in players[:25]:  # Discord limit
+            # Get IGN for display
+            ign = player.get('ign', 'Unknown')
+            options.append(
+                discord.SelectOption(
+                    label=f"{ign}",
+                    value=str(player['discord_id']),
+                    description=f"Discord ID: {player['discord_id']}",
+                    emoji="🎮"
+                )
+            )
+        
+        super().__init__(
+            placeholder="Select a player to remove...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle player removal."""
+        await interaction.response.defer(ephemeral=True)
+        
+        player_discord_id = int(self.values[0])
+        team_id = self.team['id']
+        
+        # Find the player info for display
+        player_info = next((p for p in self.players if p['discord_id'] == player_discord_id), None)
+        player_ign = player_info.get('ign', 'Unknown') if player_info else 'Unknown'
+        
+        try:
+            # Remove the player from team_members
+            await db.pool.execute(
+                "DELETE FROM team_members WHERE team_id = $1 AND discord_id = $2 AND role = 'player'",
+                team_id, player_discord_id
+            )
+            
+            # Remove Discord roles from user
+            try:
+                member = interaction.guild.get_member(player_discord_id)
+                
+                if member:
+                    # Check if player is in any other team
+                    other_teams = await db.pool.fetch(
+                        "SELECT team_id FROM team_members WHERE discord_id = $1",
+                        player_discord_id
+                    )
+                    
+                    if not other_teams:
+                        # Remove team role
+                        team_info = await db.get_team_by_id(team_id)
+                        if team_info and team_info.get('role_id'):
+                            team_role = interaction.guild.get_role(team_info['role_id'])
+                            if team_role:
+                                await member.remove_roles(team_role)
+            except Exception as e:
+                print(f"Error removing Discord roles: {e}")
+            
+            embed = discord.Embed(
+                title="✅ Player Removed",
+                description=f"Successfully removed **{player_ign}** (<@{player_discord_id}>) from **{self.team['team_name']}**.",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name="Team", value=f"{self.team['team_name']} [{self.team['team_tag']}]", inline=True)
+            embed.add_field(name="Removed Player", value=f"{player_ign}\n<@{player_discord_id}>", inline=True)
+            embed.set_footer(text=f"Removed by {self.admin_user.name}")
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            print(f"✓ Player {player_discord_id} ({player_ign}) removed from team {team_id} by {self.admin_user.name}")
+        
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error removing player: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error removing player: {e}")
+
+
 # Team editing UI classes - must be defined before Admin class
 class EditTeamSelectView(discord.ui.View):
     """View with team selection dropdown for editing."""
@@ -2132,6 +2300,71 @@ class Admin(commands.Cog):
         view = TeamSelectView(all_teams, 'player', user)
         await interaction.followup.send(
             f"Select which team to add {user.mention} as player:",
+            view=view,
+            ephemeral=True
+        )
+    
+    @app_commands.command(
+        name="admin-remove-player",
+        description="[ADMIN] Remove a player from a team"
+    )
+    async def admin_remove_player(self, interaction: discord.Interaction):
+        """Remove a player from a team."""
+        
+        # Check if user has administrator role or bots role
+        admin_role_id = os.getenv("ADMINISTRATOR_ROLE_ID")
+        bots_role_id = os.getenv("BOTS_ROLE_ID")
+        
+        has_permission = False
+        
+        if admin_role_id:
+            admin_role = interaction.guild.get_role(int(admin_role_id))
+            if admin_role and admin_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission and bots_role_id:
+            bots_role = interaction.guild.get_role(int(bots_role_id))
+            if bots_role and bots_role in interaction.user.roles:
+                has_permission = True
+        
+        if not has_permission:
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all teams
+        all_teams = await db.get_all_teams()
+        
+        if not all_teams:
+            await interaction.followup.send(
+                "❌ No teams are registered yet.",
+                ephemeral=True
+            )
+            return
+        
+        # Filter teams that have players
+        teams_with_players = []
+        for team in all_teams:
+            members = await db.get_team_members(team['id'])
+            players = [m for m in members if m['role'] == 'player']
+            if players:
+                teams_with_players.append(team)
+        
+        if not teams_with_players:
+            await interaction.followup.send(
+                "❌ No teams have players to remove.",
+                ephemeral=True
+            )
+            return
+        
+        # Show team selection dropdown
+        view = RemovePlayerTeamSelectView(teams_with_players, interaction.user)
+        await interaction.followup.send(
+            "Select the team to remove a player from:",
             view=view,
             ephemeral=True
         )
