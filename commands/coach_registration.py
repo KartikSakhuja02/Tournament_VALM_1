@@ -138,23 +138,51 @@ class CoachRegistrationButtons(discord.ui.View):
             
             print(f"[DEBUG] Teams with available coach slots: {len(teams_with_slots)}")
             
-            # Send team selection UI
+            # Send team selection UI (split into multiple messages if more than 24 teams)
             welcome_embed = discord.Embed(
                 title="Select Team to Coach",
                 description=(
                     f"Hello {interaction.user.mention}!\n\n"
-                    "Please select which team you want to coach from the dropdown below.\n\n"
+                    "Please select which team you want to coach from the dropdown(s) below.\n\n"
                     "**Note:** The team captain and managers will need to approve your request."
                 ),
                 color=discord.Color.blue()
             )
             
-            team_select_view = TeamSelectView(
-                user_id=interaction.user.id,
-                teams_with_slots=teams_with_slots
-            )
+            # Send welcome message first
+            await thread.send(embed=welcome_embed)
             
-            await thread.send(embed=welcome_embed, view=team_select_view)
+            # Split teams into chunks of 24 (leaving 1 slot for "My Team is Not Listed")
+            chunk_size = 24
+            total_teams = len(teams_with_slots) if teams_with_slots else 0
+            
+            if total_teams == 0:
+                # No teams available, just send one dropdown with "My Team is Not Listed"
+                team_select_view = TeamSelectView(
+                    user_id=interaction.user.id,
+                    teams_with_slots=[],
+                    page_num=1,
+                    total_pages=1
+                )
+                await thread.send(view=team_select_view)
+            else:
+                # Split teams into multiple dropdowns if needed
+                total_pages = (total_teams + chunk_size - 1) // chunk_size  # Ceiling division
+                
+                for page in range(total_pages):
+                    start_idx = page * chunk_size
+                    end_idx = min(start_idx + chunk_size, total_teams)
+                    teams_chunk = teams_with_slots[start_idx:end_idx]
+                    
+                    team_select_view = TeamSelectView(
+                        user_id=interaction.user.id,
+                        teams_with_slots=teams_chunk,
+                        page_num=page + 1,
+                        total_pages=total_pages
+                    )
+                    
+                    page_info = f"**Page {page + 1} of {total_pages}**" if total_pages > 1 else ""
+                    await thread.send(page_info, view=team_select_view) if page_info else await thread.send(view=team_select_view)
             
             # Start inactivity warning task
             task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
@@ -185,25 +213,29 @@ class CoachRegistrationButtons(discord.ui.View):
 class TeamSelectView(discord.ui.View):
     """View with team dropdown"""
     
-    def __init__(self, user_id: int, teams_with_slots: list):
+    def __init__(self, user_id: int, teams_with_slots: list, page_num: int = 1, total_pages: int = 1):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.teams_with_slots = teams_with_slots
+        self.page_num = page_num
+        self.total_pages = total_pages
         
         # Add team select dropdown
-        self.add_item(TeamSelect(user_id, teams_with_slots))
+        self.add_item(TeamSelect(user_id, teams_with_slots, page_num, total_pages))
 
 
 class TeamSelect(discord.ui.Select):
     """Dropdown for team selection"""
     
-    def __init__(self, user_id: int, teams_with_slots: list):
+    def __init__(self, user_id: int, teams_with_slots: list, page_num: int = 1, total_pages: int = 1):
         self.user_id = user_id
-        self.teams_with_slots = teams_with_slots
+        self.teams_with_slots = teams_with_slots if teams_with_slots is not None else []
+        self.page_num = page_num
+        self.total_pages = total_pages
         
         options = []
         
-        # Always add 'My Team is Not Listed' option first
+        # Always add 'My Team is Not Listed' option
         options.append(
             discord.SelectOption(
                 label="My Team is Not Listed",
@@ -212,20 +244,23 @@ class TeamSelect(discord.ui.Select):
             )
         )
         
-        if teams_with_slots:
-            # Add teams with available coach slots
-            for item in teams_with_slots:
-                team = item['team']
-                options.append(
-                    discord.SelectOption(
-                        label=f"{team['team_name']} [{team['team_tag']}]",
-                        value=str(team['id']),
-                        description="1 coach slot available"
-                    )
+        # Add teams from this page/chunk
+        for item in self.teams_with_slots:
+            team = item['team']
+            options.append(
+                discord.SelectOption(
+                    label=f"{team['team_name']} [{team['team_tag']}]",
+                    value=str(team['id']),
+                    description="Coach slot available"
                 )
+            )
+        
+        placeholder = "Choose a team to coach..."
+        if total_pages > 1:
+            placeholder = f"Teams (Page {page_num}/{total_pages})..."
         
         super().__init__(
-            placeholder="Choose a team to coach...",
+            placeholder=placeholder,
             options=options,
             min_values=1,
             max_values=1
