@@ -57,6 +57,31 @@ async def setup_hook():
     # Load command extensions
     await load_commands()
     
+    # Register persistent views (must be done AFTER loading cogs)
+    try:
+        from commands.registration import RegistrationButtons
+        from commands.team_registration import TeamRegistrationButtons
+        from commands.manager_registration import ManagerRegistrationButtons
+        from commands.coach_registration import CoachRegistrationButtons
+        from commands.team_management import TeamInviteResponseView, TeamLeaveConfirmView, TeamDisbandConfirmView, TransferCaptainshipMemberSelectView
+        
+        # Get the registration cog to pass to RegistrationButtons
+        registration_cog = bot.get_cog("RegistrationCog")
+        
+        # Add persistent views
+        bot.add_view(RegistrationButtons(registration_cog))
+        bot.add_view(TeamRegistrationButtons())
+        bot.add_view(ManagerRegistrationButtons())
+        bot.add_view(CoachRegistrationButtons())
+        bot.add_view(TeamInviteResponseView())
+        bot.add_view(TeamLeaveConfirmView())
+        bot.add_view(TeamDisbandConfirmView())
+        bot.add_view(TransferCaptainshipMemberSelectView())
+        
+        print("✓ Registered 8 persistent views")
+    except Exception as e:
+        print(f"⚠️  Failed to register persistent views: {e}")
+    
     # Sync slash commands
     try:
         synced = await bot.tree.sync()
