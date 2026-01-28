@@ -41,6 +41,12 @@ class ManagerRegistrationButtons(discord.ui.View):
         # Respond immediately to prevent timeout
         await interaction.response.defer(ephemeral=True)
         
+        # Send quick acknowledgment
+        await interaction.followup.send(
+            "⏳ Setting up your manager registration...",
+            ephemeral=True
+        )
+        
         # Check if user is already a member of any team (any role)
         all_user_teams = []
         all_teams = await db.get_all_teams()
