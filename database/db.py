@@ -533,5 +533,96 @@ class Database:
             return team
 
 
-# Global database instance
-db = Database()
+    # Registration lock operations
+    
+    async def is_registration_locked(self) -> bool:
+        """Check if registrations are locked"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT is_locked FROM registration_status WHERE id = 1"
+            )
+            return row['is_locked'] if row else False
+    
+    async def get_registration_status(self) -> Optional[Dict]:
+        """Get full registration status"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM registration_status WHERE id = 1"
+            )
+            return dict(row) if row else None
+    
+    async def lock_registrations(self, admin_id: int, message: str = None) -> None:
+        """Lock registrations"""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE registration_status 
+                SET is_locked = TRUE, 
+                    locked_at = CURRENT_TIMESTAMP, 
+                    locked_by = $1,
+                    lock_message = COALESCE($2, lock_message)
+                WHERE id = 1
+                """,
+                admin_id, message
+            )
+    
+    async def unlock_registrations(self, admin_id: int) -> List[int]:
+        """Unlock registrations and return list of users to notify"""
+        async with self.pool.acquire() as conn:
+            # Update registration status
+            await conn.execute(
+                """
+                UPDATE registration_status 
+                SET is_locked = FALSE, 
+                    unlocked_at = CURRENT_TIMESTAMP, 
+                    unlocked_by = $1
+                WHERE id = 1
+                """,
+                admin_id
+            )
+            
+            # Get users who want notifications and haven't been notified
+            rows = await conn.fetch(
+                "SELECT discord_id FROM registration_notifications WHERE notified = FALSE"
+            )
+            
+            user_ids = [row['discord_id'] for row in rows]
+            
+            # Mark them as notified
+            if user_ids:
+                await conn.execute(
+                    "UPDATE registration_notifications SET notified = TRUE WHERE notified = FALSE"
+                )
+            
+            return user_ids
+    
+    async def subscribe_registration_notification(self, discord_id: int) -> None:
+        """Subscribe to registration notifications"""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO registration_notifications (discord_id, notified)
+                VALUES ($1, FALSE)
+                ON CONFLICT (discord_id) DO UPDATE SET notified = FALSE
+                """,
+                discord_id
+            )
+    
+    async def unsubscribe_registration_notification(self, discord_id: int) -> None:
+        """Unsubscribe from registration notifications"""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM registration_notifications WHERE discord_id = $1",
+                discord_id
+            )
+    
+    async def is_subscribed_to_notifications(self, discord_id: int) -> bool:
+        """Check if user is subscribed to notifications"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT discord_id FROM registration_notifications WHERE discord_id = $1",
+                discord_id
+            )
+            return row is not None
+
+
