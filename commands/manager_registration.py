@@ -111,41 +111,50 @@ class ManagerRegistrationButtons(discord.ui.View):
             # Add staff members (admins always, headmods only if online)
             await add_staff_to_thread(thread, interaction.guild)
             
-            # Send confirmation
+            # Send confirmation to user
             await interaction.followup.send(
-                f"✅ Private thread created: {thread.mention}",
+                f"✅ Private thread created: {thread.mention}\nPlease check the thread for team selection.",
                 ephemeral=True
             )
             
-            # Get teams with available manager slots (excluding teams user is already in)
-            teams = await db.get_all_teams()
-            print(f"[DEBUG] Total teams found: {len(teams)}")
-            
-            teams_with_slots = []
-            
-            for team in teams:
-                members = await db.get_team_members(team['id'])
-                print(f"[DEBUG] Team '{team['team_name']}' has {len(members)} members")
+            # Get teams with available manager slots
+            try:
+                teams = await db.get_all_teams()
+                print(f"[DEBUG] Total teams found: {len(teams)}")
                 
-                # Skip if user is already a member of this team
-                if any(m['discord_id'] == interaction.user.id for m in members):
-                    print(f"[DEBUG] Skipping team '{team['team_name']}' - user already a member")
-                    continue
+                teams_with_slots = []
                 
-                manager_count = sum(1 for m in members if m['role'] == 'manager')
-                print(f"[DEBUG] Team '{team['team_name']}' has {manager_count} managers")
+                for team in teams:
+                    try:
+                        members = await db.get_team_members(team['id'])
+                        print(f"[DEBUG] Team '{team['team_name']}' has {len(members)} members")
+                        
+                        # Skip if user is already a member of this team
+                        if any(m['discord_id'] == interaction.user.id for m in members):
+                            print(f"[DEBUG] Skipping team '{team['team_name']}' - user already a member")
+                            continue
+                        
+                        manager_count = sum(1 for m in members if m['role'] == 'manager')
+                        print(f"[DEBUG] Team '{team['team_name']}' has {manager_count} managers")
+                        
+                        if manager_count < 2:  # Max 2 managers per team
+                            available_slots = 2 - manager_count
+                            teams_with_slots.append({
+                                'team': team,
+                                'available_slots': available_slots
+                            })
+                            print(f"[DEBUG] Team '{team['team_name']}' added with {available_slots} slots")
+                    except Exception as team_error:
+                        print(f"[ERROR] Error processing team {team.get('team_name', 'unknown')}: {team_error}")
+                        continue
                 
-                if manager_count < 2:  # Max 2 managers per team
-                    available_slots = 2 - manager_count
-                    teams_with_slots.append({
-                        'team': team,
-                        'available_slots': available_slots
-                    })
-                    print(f"[DEBUG] Team '{team['team_name']}' added with {available_slots} slots")
+                print(f"[DEBUG] Teams with available slots: {len(teams_with_slots)}")
             
-            print(f"[DEBUG] Teams with available slots: {len(teams_with_slots)}")
+            except Exception as db_error:
+                print(f"[ERROR] Error fetching teams: {db_error}")
+                teams_with_slots = []
             
-            # Send team selection UI
+            # Send team selection UI (always send this, even if no teams available)
             welcome_embed = discord.Embed(
                 title="Select Team to Manage",
                 description=(
@@ -161,7 +170,14 @@ class ManagerRegistrationButtons(discord.ui.View):
                 teams_with_slots=teams_with_slots
             )
             
-            await thread.send(embed=welcome_embed, view=team_select_view)
+            try:
+                await thread.send(embed=welcome_embed, view=team_select_view)
+                print(f"✓ Sent team selection message to thread {thread.id}")
+            except Exception as send_error:
+                print(f"[ERROR] Failed to send welcome message: {send_error}")
+                await thread.send(
+                    f"❌ Error loading teams. Please contact an administrator.\nError: {str(send_error)}"
+                )
             
             # Start inactivity warning task
             task = asyncio.create_task(inactivity_warning_task(thread, interaction.user.id))
