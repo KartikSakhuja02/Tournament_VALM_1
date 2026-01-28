@@ -626,3 +626,7 @@ class Database:
             return row is not None
 
 
+# Global database instance
+db = Database()
+
+
