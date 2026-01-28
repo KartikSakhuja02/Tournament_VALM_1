@@ -222,7 +222,8 @@ class TeamSelect(discord.ui.Select):
     
     def __init__(self, user_id: int, teams_with_slots: list):
         self.user_id = user_id
-        self.teams_with_slots = teams_with_slots
+        # Ensure teams_with_slots is always a list
+        self.teams_with_slots = teams_with_slots if teams_with_slots is not None else []
         
         options = []
         
@@ -235,9 +236,9 @@ class TeamSelect(discord.ui.Select):
             )
         )
         
-        if teams_with_slots:
-            # Add teams with available slots
-            for item in teams_with_slots:
+        if self.teams_with_slots:
+            # Add teams with available slots (limit to 24 since we already have 1 option)
+            for item in self.teams_with_slots[:24]:
                 team = item['team']
                 slots = item['available_slots']
                 options.append(
@@ -247,6 +248,17 @@ class TeamSelect(discord.ui.Select):
                         description=f"{slots} manager slot{'s' if slots > 1 else ''} available"
                     )
                 )
+        
+        # Ensure we have at least 1 option before calling super().__init__
+        if not options:
+            # Fallback: add a default option
+            options.append(
+                discord.SelectOption(
+                    label="No teams available",
+                    value="no_teams",
+                    description="No teams are currently accepting managers"
+                )
+            )
         
         super().__init__(
             placeholder="Choose a team to manage...",
