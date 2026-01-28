@@ -20,28 +20,6 @@ class CoachRegistrationButtons(discord.ui.View):
     )
     async def register_coach(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle coach registration button click"""
-        # Check if registrations are locked
-        is_locked = await db.is_registration_locked()
-        if is_locked:
-            status = await db.get_registration_status()
-            lock_message = status['lock_message'] if status else "We are not accepting registrations at the moment. We will open registrations soon. Stay tuned!"
-            
-            # Check if user is subscribed
-            is_subscribed = await db.is_subscribed_to_notifications(interaction.user.id)
-            
-            embed = discord.Embed(
-                title="🔒 Registrations Locked",
-                description=lock_message,
-                color=discord.Color.red()
-            )
-            
-            # Import NotificationToggleView from registration module
-            from commands.registration import NotificationToggleView
-            view = NotificationToggleView(interaction.user.id, is_subscribed)
-            
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            return
-        
         # Check if user is banned
         ban_info = await db.is_player_banned(interaction.user.id)
         if ban_info:

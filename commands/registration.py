@@ -10,73 +10,6 @@ from utils.thread_manager import add_staff_to_thread
 _active_threads = {}  # thread_id: {'task': asyncio.Task, 'target_user_id': int}
 
 
-class NotificationToggleView(discord.ui.View):
-    """View with notification subscription toggle button"""
-    
-    def __init__(self, user_id: int, is_subscribed: bool):
-        super().__init__(timeout=300)
-        self.user_id = user_id
-        self.update_button_state(is_subscribed)
-    
-    def update_button_state(self, is_subscribed: bool):
-        """Update button based on subscription status"""
-        self.clear_items()
-        
-        if is_subscribed:
-            button = discord.ui.Button(
-                label="🔔 Unsubscribe from Notifications",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"unsub_{self.user_id}"
-            )
-            button.callback = self.unsubscribe_callback
-        else:
-            button = discord.ui.Button(
-                label="🔕 Get Notified When Registrations Open",
-                style=discord.ButtonStyle.success,
-                custom_id=f"sub_{self.user_id}"
-            )
-            button.callback = self.subscribe_callback
-        
-        self.add_item(button)
-    
-    async def subscribe_callback(self, interaction: discord.Interaction):
-        """Handle subscription"""
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This is not your notification button.", ephemeral=True)
-            return
-        
-        await db.subscribe_registration_notification(self.user_id)
-        
-        embed = discord.Embed(
-            title="✅ Subscribed to Notifications",
-            description="You will receive a DM when registrations open again!",
-            color=discord.Color.green()
-        )
-        
-        self.update_button_state(True)
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    async def unsubscribe_callback(self, interaction: discord.Interaction):
-        """Handle unsubscription"""
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This is not your notification button.", ephemeral=True)
-            return
-        
-        await db.unsubscribe_registration_notification(self.user_id)
-        
-        status = await db.get_registration_status()
-        lock_message = status['lock_message'] if status else "We are not accepting registrations at the moment. We will open registrations soon. Stay tuned!"
-        
-        embed = discord.Embed(
-            title="🔒 Registrations Locked",
-            description=lock_message,
-            color=discord.Color.red()
-        )
-        
-        self.update_button_state(False)
-        await interaction.response.edit_message(embed=embed, view=self)
-
-
 async def inactivity_warning_task(thread: discord.Thread, target_user_id: int):
     """
     Background task to handle inactivity warnings for registration threads.
@@ -931,27 +864,6 @@ class RegistrationButtons(discord.ui.View):
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle registration button click"""
-        # Check if registrations are locked
-        is_locked = await db.is_registration_locked()
-        if is_locked:
-            status = await db.get_registration_status()
-            lock_message = status['lock_message'] if status else "We are not accepting registrations at the moment. We will open registrations soon. Stay tuned!"
-            
-            # Check if user is subscribed
-            is_subscribed = await db.is_subscribed_to_notifications(interaction.user.id)
-            
-            embed = discord.Embed(
-                title="🔒 Registrations Locked",
-                description=lock_message,
-                color=discord.Color.red()
-            )
-            
-            # Create notification toggle view
-            view = NotificationToggleView(interaction.user.id, is_subscribed)
-            
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            return
-        
         # Check if user already has an active registration thread (including temp placeholders)
         for thread_id, thread_data in list(_active_threads.items()):
             if thread_data['target_user_id'] == interaction.user.id:

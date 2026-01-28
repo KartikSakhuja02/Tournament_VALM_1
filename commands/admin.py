@@ -2193,108 +2193,14 @@ class Admin(commands.Cog):
                 ephemeral=True
             )
             return
-    
-    @app_commands.command(name="admin-lock-registrations", description="Lock all registrations")
-    @app_commands.describe(message="Custom message to show when registrations are locked")
-    async def admin_lock_registrations(self, interaction: discord.Interaction, message: str = None):
-        """Lock all registrations with an optional custom message"""
-        if not await self.check_admin(interaction):
-            return
         
-        await interaction.response.defer(ephemeral=True)
-        
-        # Check if already locked
-        status = await db.get_registration_status()
-        if status and status['is_locked']:
-            await interaction.followup.send(
-                "⚠️ Registrations are already locked.",
-                ephemeral=True
-            )
-            return
-        
-        # Lock registrations
-        default_message = "We are not accepting registrations at the moment. We will open registrations soon. Stay tuned!"
-        await db.lock_registrations(interaction.user.id, message or default_message)
-        
-        embed = discord.Embed(
-            title="🔒 Registrations Locked",
-            description="All registrations have been locked successfully.",
-            color=discord.Color.red(),
-            timestamp=discord.utils.utcnow()
+        # Show team selection dropdown
+        view = RemoveManagerTeamSelectView(teams_with_managers, interaction.user)
+        await interaction.followup.send(
+            "Select the team to remove a manager from:",
+            view=view,
+            ephemeral=True
         )
-        embed.add_field(
-            name="Locked By",
-            value=interaction.user.mention,
-            inline=True
-        )
-        embed.add_field(
-            name="Lock Message",
-            value=message or default_message,
-            inline=False
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-    
-    @app_commands.command(name="admin-unlock-registrations", description="Unlock all registrations and notify subscribers")
-    async def admin_unlock_registrations(self, interaction: discord.Interaction):
-        """Unlock all registrations and notify users who subscribed"""
-        if not await self.check_admin(interaction):
-            return
-        
-        await interaction.response.defer(ephemeral=True)
-        
-        # Check if locked
-        status = await db.get_registration_status()
-        if not status or not status['is_locked']:
-            await interaction.followup.send(
-                "⚠️ Registrations are already unlocked.",
-                ephemeral=True
-            )
-            return
-        
-        # Unlock and get subscribers
-        subscriber_ids = await db.unlock_registrations(interaction.user.id)
-        
-        # Notify subscribers
-        notified_count = 0
-        failed_count = 0
-        
-        for user_id in subscriber_ids:
-            try:
-                user = await self.bot.fetch_user(user_id)
-                embed = discord.Embed(
-                    title="🔓 Registrations Are Now Open!",
-                    description="The tournament registrations have been unlocked. You can now register for the tournament!",
-                    color=discord.Color.green(),
-                    timestamp=discord.utils.utcnow()
-                )
-                embed.set_footer(text="You received this notification because you subscribed to registration updates.")
-                
-                await user.send(embed=embed)
-                notified_count += 1
-            except Exception as e:
-                print(f"Failed to notify user {user_id}: {e}")
-                failed_count += 1
-        
-        # Send confirmation
-        embed = discord.Embed(
-            title="🔓 Registrations Unlocked",
-            description="All registrations have been unlocked successfully.",
-            color=discord.Color.green(),
-            timestamp=discord.utils.utcnow()
-        )
-        embed.add_field(
-            name="Unlocked By",
-            value=interaction.user.mention,
-            inline=True
-        )
-        embed.add_field(
-            name="Notifications Sent",
-            value=f"✅ {notified_count} users notified\n❌ {failed_count} failed",
-            inline=True
-        )
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
     
     @app_commands.command(
         name="admin-add-coach",
